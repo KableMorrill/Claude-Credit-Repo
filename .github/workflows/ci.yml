@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to commit SHAs: a provenance tool should know what built it.
+jobs:
+  check:
+    name: Format, lint and typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.10"
+      - name: Dependencies
+        run: uv sync --locked
+      - name: Format
+        run: uv run --locked ruff format --diff
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: uv run --locked ruff check --output-format=github
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: uv run --locked pyright
+
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is what Krita 5 embeds and what c2pa-python needs; 3.14 catches what's coming.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10"]
+        include:
+          - os: ubuntu-latest
+            python: "3.14"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Test
+        run: uv run --locked pytest

@@ -1,0 +1,47 @@
+[project]
+name = "krita-provenance"
+version = "0.1.0.dev0"  # keep equal to krita_provenance.__version__ (tests/test_version.py)
+description = "Krita plugin that logs AI generations and layer edits and exports a signed C2PA manifest"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.10"  # Krita's embedded Python; c2pa-python also needs 3.10+
+
+# Nothing here is installed into Krita. The plugin runs on Krita's embedded Python with only the
+# standard library and Qt; c2pa-python is fetched on first run (spec I2).
+[dependency-groups]
+dev = [
+    "pyqt5-stubs>=5.15.6",  # Qt types for Krita 5.3; scripts/typeshed/krita.pyi imports PyQt5
+    "pyright[nodejs]>=1.1.414",
+    "pytest>=9.1",
+    "ruff>=0.17",
+]
+
+[tool.uv]
+package = false
+
+# Tool settings follow Krita AI Diffusion's pyproject.toml, so contributors find the same rules.
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+preview = true
+src = [".", "scripts"]
+extend-exclude = ["scripts/typeshed"]
+
+[tool.ruff.lint]
+extend-select = ["B", "I", "UP"]
+ignore = ["E741"]
+
+[tool.pyright]
+include = ["krita_provenance", "scripts", "tests"]
+ignore = ["scripts/typeshed"]
+extraPaths = ["scripts/typeshed", "scripts"]
+pythonVersion = "3.10"
+reportMissingModuleSource = false
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "scripts"]
+addopts = ["--import-mode=importlib", "--strict-config", "--strict-markers", "-ra"]
+xfail_strict = true
+filterwarnings = ["error"]

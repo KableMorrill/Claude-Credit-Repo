@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Packaging
+/build/
+/dist/
+*.egg-info/
+*.zip
+
+# Private keys never go in git (threat model: stolen signing key). Test keys live in tests/fixtures.
+*.key
+*.p12
+*.pfx
+!tests/fixtures/**
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/

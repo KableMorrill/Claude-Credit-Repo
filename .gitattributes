@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+*.jpg binary
+*.jpeg binary
+*.kra binary
+*.png binary
+*.webp binary
+*.zip binary
+
+scripts/typeshed/** linguist-vendored

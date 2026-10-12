@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=krita_provenance
+X-Python-2-Compatible=false
+Name=Provenance (C2PA)
+Comment=Logs AI generations and layer edits, and exports images with a signed C2PA manifest (pre-release)
