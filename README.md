@@ -79,9 +79,13 @@ installing a release zip, so the zip doesn't land in your checkout.
   Krita, so it can be unit-tested.
 - Qt is imported only through `krita_provenance/qt.py`, which uses PyQt5 under Krita 5 and PyQt6
   under Krita 6.
-- c2pa-python is used only through `krita_provenance/sdk.py`, and Krita AI Diffusion's
-  internals only through `krita_provenance/adapters/ai_diffusion.py`, so changes upstream stay
-  in one place.
+- c2pa-python is used only through `krita_provenance/sdk.py`, cryptography only through
+  `krita_provenance/keys.py`, and Krita AI Diffusion's internals only through
+  `krita_provenance/adapters/ai_diffusion.py`, so changes upstream stay in one place.
+- The plugin's own copies of c2pa-python, cryptography and cffi are fetched on first run,
+  checked against the sizes and SHA-256 digests pinned in `krita_provenance/wheel_pins.py`,
+  and unpacked into the plugin's data folder. `scripts/update_wheel_pins.py` regenerates the
+  pins from PyPI.
 
 The test certificates in `tests/fixtures/certs` are made by `scripts/make_test_certs.py` and are
 public; never sign anything real with them. `samples/` holds exports signed with them, one per

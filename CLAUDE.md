@@ -40,12 +40,21 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
   4. **Signed samples** for other validators live in `samples/`, made by
      `scripts/make_samples.py` from the goldens; `tests/test_samples.py` fails when they drift.
      The Adobe Verify result is not yet recorded; the user uploads them.
+- **Also done (13 Oct, later):** K1 and I2, Krita-free and tested. `keys.py` makes the local
+  root CA and signing certificate with `cryptography`; a golden signed with freshly made keys
+  validates with the untrusted signer as the only failure code. `wheels.py`, `wheel_pins.py`
+  and `installer.py` fetch c2pa-python 0.38.0, cryptography 50.0.2 and cffi 2.1.1 for this
+  platform and Python, verify size and SHA-256 against the pins, unpack them into the data
+  folder and put them first on `sys.path`; `scripts/update_wheel_pins.py` regenerates the pins
+  from PyPI. A real install on this Linux x86_64 machine imported all three from the unpacked
+  folder.
 - **Not done:** everything that touches Krita. Nothing is captured, stored in a .kra or exported
-  from Krita yet. Spikes S1, S3, S4 and S5 haven't run; S2 is half done (c2pa-rs accepts the
-  OpenSSL-made test certificate; the Adobe Verify check waits on the samples, and the profile
-  is to be re-made with `cryptography` per decision 1). The go/no-go note is due 25 Oct 2026.
-- **Next:** step 5, K1, with `cryptography` (decision 1); then I2 for both wheels and the Krita
-  glue (step 7).
+  from Krita yet; keys are not yet made, and wheels not yet fetched, from inside Krita. Spikes
+  S1, S3, S4 and S5 haven't run; S2 is half done (c2pa-rs accepts both the OpenSSL-made test
+  certificate and the `cryptography`-made one; the Adobe Verify check waits on the samples).
+  The go/no-go note is due 25 Oct 2026.
+- **Next:** step 7, the Krita glue: annotation storage, the adapter, first-run install and key
+  creation, the export action, the docker and the release zip.
 
 ## Layout
 
@@ -59,10 +68,15 @@ krita_provenance/          the plugin package; Krita pairs it with krita_provena
   scrub.py                 D1: paths, user names and machine names out of everything that leaves
   mapping.py               log -> C2PA manifest definition, after the spec's mapping table
   sdk.py                   the only module that imports c2pa; sign, read back, E5, E6
+  keys.py                  K1: root CA and signing certificate, the only importer of cryptography
+  wheels.py                I2: which pinned wheel fits a platform and Python (stdlib only)
+  wheel_pins.py            I2: GENERATED pins: file names, URLs, sizes, SHA-256 (do not edit)
+  installer.py             I2: fetch, verify, unpack, record and activate the pinned wheels
 krita_provenance.desktop   plugin manifest Krita reads at startup
 scripts/dev_install.py     links this checkout into Krita's pykrita folder
 scripts/make_test_certs.py makes the test certificates in tests/fixtures/certs with OpenSSL
 scripts/make_samples.py    signs the goldens into samples/ for other validators
+scripts/update_wheel_pins.py regenerates wheel_pins.py from PyPI; review the diff it makes
 scripts/typeshed/          Krita API stubs, vendored unmodified (see the README there)
 samples/                   signed sample exports, one per golden case (see the README there)
 tests/                     pytest; nothing needs Krita. goldens.py loads tests/fixtures/goldens
@@ -98,6 +112,11 @@ Enforced by `tests/test_architecture.py`:
 - Qt comes only through `krita_provenance/qt.py`, never from PyQt5 or PyQt6 directly.
 - `c2pa` is imported only in `krita_provenance/sdk.py`, lazily, because the wheel arrives at
   first run (I2). c2pa-python 0.38.0 is a dev dependency so the signing tests run in CI.
+- `cryptography` is imported only in `krita_provenance/keys.py`, lazily, for the same reason;
+  cryptography 50.0.2 is a dev dependency, the version the plugin fetches.
+- `wheel_pins.py` is generated. To change a pinned version, edit `PINS` in
+  `scripts/update_wheel_pins.py`, run it, bump the dev dependency to match, and review the
+  diff: those digests are what every download is checked against.
 - `ai_diffusion` is imported only in `krita_provenance/adapters/ai_diffusion.py`.
 - `version` in pyproject.toml equals `krita_provenance.__version__` (`tests/test_version.py`).
 
@@ -224,6 +243,18 @@ Rely on these; check anything else against source.
   `c2pa.ingredient.v3` assertion holds only the title, format, relationship and instance id: no
   hash of the bytes and no thumbnail. The parent names the file; it does not bind to its bytes.
 
+**Wheels on PyPI, checked 13 Oct 2026** (`scripts/update_wheel_pins.py` reads the same data):
+
+- c2pa-python 0.38.0: `py3-none` wheels for macOS 10.9 x86_64 and universal2, macOS 11
+  arm64, manylinux_2_28 x86_64 and aarch64, win_amd64 and win_arm64; 15 MB each, 88 MB on
+  Windows. It needs glibc 2.28 on Linux.
+- cryptography 50.0.2: `cp39-abi3` and `cp311-abi3` wheels (one file covers every CPython from
+  that minor on) for manylinux_2_17 x86_64 and aarch64, macOS 11 arm64 and win_amd64; about
+  4 MB. No macOS Intel, no Windows ARM, no 32-bit.
+- cffi 2.1.1: one wheel per CPython minor (3.10 to 3.15) for manylinux_2_17, macOS 10.15 x86_64
+  and 11 arm64, win_amd64 and, from 3.11, win_arm64; about 200 KB.
+- Free-threaded (`cp314t`) and PyPy wheels exist and are skipped: Krita's Python is neither.
+
 **Krita API stubs** (`scripts/typeshed/krita.pyi`): `Document` has `annotation`,
 `setAnnotation`, `annotationTypes`, `removeAnnotation`, `exportImage`, `topLevelNodes` and
 `nodeByUniqueID`; `Node` has `uniqueId`, `childNodes` and `bounds`. `Notifier.imageSaved` fires
@@ -233,10 +264,14 @@ after a save; there is no before-save signal.
 
 Raise these with the user rather than settling them silently.
 
-- K1 is decided (decision 1 above). Still to choose: which `cryptography` and `cffi` versions
-  to pin; take the newest with wheels for every platform in the CI matrix.
-- I2: c2pa-python works without its declared dependencies, so the plugin unpacks its wheel plus
-  `cryptography` and `cffi` for K1, each pinned and SHA-256 checked.
+- K1 and I2 are built. Pinned: cryptography 50.0.2 and cffi 2.1.1, the newest at the time.
+  cryptography has shipped no macOS Intel wheel since 46.0.4 and no Windows ARM wheel since
+  46.0.3, so on those machines the installer fetches c2pa-python alone, K1 is unavailable and
+  K2's own certificate is the way to sign. The spec's matrix (Windows x64, macOS arm64, Linux
+  x64) is fully covered.
+- Where the data folder lives, and what the first-run dialog looks like, is the glue's (step
+  7): `installer.install` takes any folder, reports progress per wheel, and `keys.ensure`
+  takes any folder.
 - P1 says "before save", but Krita has no before-save signal. Debounced writes that keep the
   annotation current, as Krita AI Diffusion does, may be the answer; S4 checks it in Krita.
 - Q1 (generation as an action only, or also as an ingredient) waits on S5. Build the action-only
