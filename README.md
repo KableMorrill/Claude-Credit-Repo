@@ -6,10 +6,12 @@ for artists who have to disclose AI use, such as on a US copyright application, 
 crowdfunding campaign, and it works alongside
 [Krita AI Diffusion](https://github.com/Acly/krita-ai-diffusion).
 
-> **Status: early development.** Nothing is recorded or exported yet. The plugin loads in Krita
-> and adds one menu item, Tools ▸ Scripts ▸ Provenance: Check Environment, which reports the
-> Python, Qt, Krita AI Diffusion and c2pa-python versions Krita can see. Capture and signed
-> export are planned for v0.1.
+> **Status: early development.** Nothing is recorded or exported from Krita yet. The plugin
+> loads in Krita and adds one menu item, Tools ▸ Scripts ▸ Provenance: Check Environment, which
+> reports the Python, Qt, Krita AI Diffusion and c2pa-python versions Krita can see. The
+> Krita-free core exists and is tested: the log format, scrubbing, the log-to-C2PA mapping and
+> signing with c2pa-python, with golden manifests that sign and validate. Capture and signed
+> export inside Krita are planned for v0.1.
 
 `krita-provenance` is a working title.
 
@@ -77,9 +79,12 @@ installing a release zip, so the zip doesn't land in your checkout.
   Krita, so it can be unit-tested.
 - Qt is imported only through `krita_provenance/qt.py`, which uses PyQt5 under Krita 5 and PyQt6
   under Krita 6.
-- c2pa-python will be used only through `krita_provenance/sdk.py`, and Krita AI Diffusion's
+- c2pa-python is used only through `krita_provenance/sdk.py`, and Krita AI Diffusion's
   internals only through `krita_provenance/adapters/ai_diffusion.py`, so changes upstream stay
   in one place.
+
+The test certificates in `tests/fixtures/certs` are made by `scripts/make_test_certs.py` and are
+public; never sign anything real with them.
 
 Krita's Python API is described by stubs in `scripts/typeshed`, copied from Krita AI Diffusion
 (details in the README there).

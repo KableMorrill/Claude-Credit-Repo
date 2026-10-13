@@ -11,13 +11,19 @@ those names.
 scope, the log format, the C2PA mapping, the threat model and the milestones. Requirement IDs
 (C1, P1, E1, …), spikes (S1–S5) and open questions (Q1–Q11) come from it.
 
-## Where things stand (12 Oct 2026)
+## Where things stand (13 Oct 2026)
 
-- **Done:** the repo scaffold, the spec's "Create the repo" item. The plugin loads in Krita and
-  adds Tools ▸ Scripts ▸ Provenance: Check Environment, which reports the Python, Qt, Krita AI
-  Diffusion and c2pa-python versions Krita sees. Nothing is captured, logged or exported yet.
-- **Not done:** every requirement. Spikes S1–S5 haven't run; the go/no-go note is due 25 Oct 2026.
-- **Next:** M1, Core v0.1: C1–C3, P1, E1, E2, E4–E6, D1, V1, K1, I1, I2.
+- **Done:** the repo scaffold and Tools ▸ Scripts ▸ Provenance: Check Environment. M1 steps 1–4
+  of the order below, all Krita-free and tested: the log model (`log.py`), scrubbing (`scrub.py`),
+  the log-to-manifest mapping with golden fixtures (`mapping.py`, `tests/fixtures/goldens`), and
+  `sdk.py`, which signs PNG and JPEG with c2pa-python 0.38.0, reads them back and keeps E5 and E6.
+  Golden manifests sign and validate with an untrusted signer as the only failure code.
+  `scripts/make_test_certs.py` makes a root CA and signing certificate with OpenSSL that c2pa-rs
+  accepts (spike S2's profile); the test copies are in `tests/fixtures/certs`.
+- **Not done:** everything that touches Krita. Nothing is captured, stored in a .kra or exported
+  from Krita yet. Spikes S1, S3, S4 and S5 haven't run; the go/no-go note is due 25 Oct 2026.
+- **Next:** step 5, K1, once the user has said how certificates should be generated (see Open
+  technical questions); then I2 and the Krita glue (step 7).
 
 ## Layout
 
@@ -27,10 +33,17 @@ krita_provenance/          the plugin package; Krita pairs it with krita_provena
   extension.py             Krita glue, the only module allowed to import `krita`
   qt.py                    Qt shim: PyQt5 under Krita 5, PyQt6 under Krita 6
   environment.py           the Check Environment report (Krita-free, tested)
+  log.py                   the provenance log: P1's format, event types, JSON round trip
+  scrub.py                 D1: paths, user names and machine names out of everything that leaves
+  mapping.py               log -> C2PA manifest definition, after the spec's mapping table
+  sdk.py                   the only module that imports c2pa; sign, read back, E5, E6
 krita_provenance.desktop   plugin manifest Krita reads at startup
 scripts/dev_install.py     links this checkout into Krita's pykrita folder
+scripts/make_test_certs.py makes the test certificates in tests/fixtures/certs with OpenSSL
 scripts/typeshed/          Krita API stubs, vendored unmodified (see the README there)
-tests/                     pytest; nothing needs Krita
+tests/                     pytest; nothing needs Krita. goldens.py loads tests/fixtures/goldens
+tests/fixtures/goldens/    per case: log.json, export.json (what the exporter knew), manifest.json
+tests/fixtures/certs/      test root CA and signing certificate; never sign anything real with them
 docs/spec.md               the project spec
 docs/smoke-checklist.md    checks the user runs inside Krita
 .github/workflows/ci.yml   CI on every push
@@ -59,7 +72,7 @@ Enforced by `tests/test_architecture.py`:
   `ALLOWED_IMPORTERS` on purpose, and keep it thin.
 - Qt comes only through `krita_provenance/qt.py`, never from PyQt5 or PyQt6 directly.
 - `c2pa` is imported only in `krita_provenance/sdk.py`, lazily, because the wheel arrives at
-  first run (I2).
+  first run (I2). c2pa-python 0.38.0 is a dev dependency so the signing tests run in CI.
 - `ai_diffusion` is imported only in `krita_provenance/adapters/ai_diffusion.py`.
 - `version` in pyproject.toml equals `krita_provenance.__version__` (`tests/test_version.py`).
 
@@ -70,7 +83,11 @@ From the spec. Add tests for each as you implement it:
   uncertain region as possibly AI, and say why. State facts, not legal conclusions.
 - Capture never writes C2PA. The manifest is rebuilt from the log at every export.
 - The log is append-only, versioned JSON (`"schema": "krita-provenance/1"`) stored in the
-  `krita-provenance.json` annotation. Never rewrite or drop past events.
+  `krita-provenance.json` annotation. Never rewrite or drop past events. Unknown event types
+  survive a round trip and map to `c2pa.unknown`.
+- Golden tests: `tests/fixtures/goldens/<case>/` holds a log, `export.json` and the expected
+  `manifest.json`. After a deliberate mapping change run `UPDATE_GOLDENS=1 uv run pytest` and
+  review the diff; never update goldens to make a test pass.
 - E5: never add custom hash exclusions. E6: if signing fails, label the saved file unsigned; it
   must never look signed.
 - D1: scrub file paths, user names and machine names from every field that leaves the .kra.
@@ -153,6 +170,30 @@ Rely on these; check anything else against source.
   (`cryptography`, `requests`, `toml`) serve the examples and its build script.
 - It has no certificate-generation API.
 
+**c2pa-python 0.38.0 behaviour, checked by signing** (tests/test_sdk.py reproduces these):
+
+- `c2pa.created` must carry a `digitalSourceType`; without one the manifest fails validation
+  at signing (`assertion.action.malformed`). With intent Create a `parentOf` ingredient is an
+  error; with intent Edit, `c2pa.opened` must name a parent that was really added through
+  `Builder.add_ingredient`, else "Action ingredientId not found".
+- The region `role` field in the spec's mapping table is deprecated since C2PA 2.1, fails CBOR
+  decoding in c2pa-rs 0.91.0 ("expected enum Role") and is removed in 0.92.0. Regions carry a
+  `description` instead.
+- With a signer on no trust list, `validation_state` is `Valid`, `failure` holds exactly
+  `signingCredential.untrusted`, and `informational` holds `signingCredential.ocsp.skipped`.
+  Those are the only codes a fresh export may carry.
+- The data-hash assertion has one exclusion, the manifest store (`Reader.detailed_json()`,
+  `assertion_store["c2pa.hash.data"].exclusions`). A definition that includes a
+  `c2pa.hash.data` assertion is rejected by the Builder; sdk.py refuses it first anyway (E5).
+- A failed `Builder.sign` leaves a zero-byte destination, so sdk.py signs to a temporary file.
+- `Signer.from_info` refuses a self-signed end-entity certificate and a malformed key with
+  `C2paError.Signature`. The accepted certificate profile is in `scripts/make_test_certs.py`.
+- `Reader` raises `C2paError.ManifestNotFound` on a file without a manifest and
+  `C2paError.NotSupported` on a non-asset. `import c2pa` emits no warnings, so pytest's
+  `filterwarnings = error` is safe.
+- Regions come back with float coordinates; `ingredientIds` in action parameters are rewritten
+  to hashed `ingredients` URIs; `claim_generator_info` gains `org.contentauth.c2pa_rs`.
+
 **Krita API stubs** (`scripts/typeshed/krita.pyi`): `Document` has `annotation`,
 `setAnnotation`, `annotationTypes`, `removeAnnotation`, `exportImage`, `topLevelNodes` and
 `nodeByUniqueID`; `Node` has `uniqueId`, `childNodes` and `bounds`. `Notifier.imageSaved` fires
@@ -171,6 +212,11 @@ Raise these with the user rather than settling them silently.
   annotation current, as Krita AI Diffusion does, may be the answer; S4 checks it in Krita.
 - Q1 (generation as an action only, or also as an ingredient) waits on S5. Build the action-only
   form, with the choice in one place.
+- A document the plugin first sees after it already has content (an older .kra) has no honest
+  first action: `c2pa.created` would need a digital source type nobody observed, and
+  `c2pa.opened` needs a parent file. `mapping.py` refuses any `log_started.reason` other than
+  `new_document` and `opened_image` until the user decides; the candidates are in the session
+  summary of 13 Oct 2026.
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 
