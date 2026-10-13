@@ -50,13 +50,36 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
   set Krita 5 fetches: c2pa-python manylinux_2_28, cryptography cp39-abi3, cffi cp310),
   downloaded, verified and unpacked all three, and a clean Python imported them from the
   folder. The macOS and Windows wheel sets have not been fetched through the installer.
-- **Not done:** everything that touches Krita. Nothing is captured, stored in a .kra or exported
-  from Krita yet; keys are not yet made, and wheels not yet fetched, from inside Krita. Spikes
-  S1, S3, S4 and S5 haven't run; S2 is half done (c2pa-rs accepts both the OpenSSL-made test
-  certificate and the `cryptography`-made one; the Adobe Verify check waits on the samples).
-  The go/no-go note is due 25 Oct 2026.
-- **Next:** step 7, the Krita glue: annotation storage, the adapter, first-run install and key
-  creation, the export action, the docker and the release zip.
+- **Decisions of 13 Oct 2026, second set**, from the user, for step 7:
+  1. **Root key:** discarded after issuing the signer certificate. Rotation (K4, later) means a
+     new root and signer with a new fingerprint. Built: `keys.py` writes three files.
+  2. **Key storage:** unencrypted PEM in the data folder is fine for v0.1, with restrictive
+     permissions where the OS supports them; claim no more on Windows than the profile folder
+     gives. Validity stays 20y/10y with the one-day backdate; revisit with K3.
+  3. **Older document with unsaved changes at export:** a dialog with "Save and export signed",
+     "Export unsigned" and "Cancel". Never save silently.
+  4. **Intel Mac and Windows ARM:** accept the gap; don't pin an old cryptography. Show that key
+     creation isn't available on this platform yet and point to K2. Built: `installer.plan`.
+  5. **Data folder:** a `krita-provenance` subfolder in Krita's app-data location, never inside
+     the plugin folder, so reinstalling can't delete keys.
+  6. **Timestamps** stay off for v0.1; opt-in later under K3.
+  7. **Review:** one review at the end of step 7, limited to E6 labelling, key creation and
+     storage, the installer hash check, and the log never losing events.
+  8. **Order:** annotation storage first, then stop for the user to test it in Krita (S4) while
+     they run S1 and upload `samples/` to Adobe Verify.
+- **Step 7, first part, done (13 Oct, later still):** `storage.py` reads and writes the log as
+  the `krita-provenance.json` annotation, chooses the start reason from the file name (none:
+  `new_document`; image: `opened_image` with the file as parent; .kra or .ora:
+  `existing_document` with the file as parent), summarises the log and holds the debounce
+  policy. `extension.py` adds Tools ▸ Scripts ▸ Provenance: Log Status, which creates the log
+  if absent and shows the summary; docs/smoke-checklist.md rows 4 to 8 are the S4 check.
+  Type-checked against the stubs only; unverified in Krita.
+- **Not done:** the rest of step 7: debounced writes on capture, the Krita AI Diffusion adapter
+  (C1–C3), first-run install and key creation in Krita, the export action with the dialog of
+  decision 3, the docker (V1) and the release zip (I1). Spikes S1, S3 and S5 haven't run; S4
+  waits on the user running rows 4 to 8; S2 waits on the Adobe Verify upload. The go/no-go note
+  is due 25 Oct 2026.
+- **Next:** wait for the user's S4 result, then the rest of step 7 in the order above.
 
 ## Layout
 
@@ -74,6 +97,7 @@ krita_provenance/          the plugin package; Krita pairs it with krita_provena
   wheels.py                I2: which pinned wheel fits a platform and Python (stdlib only)
   wheel_pins.py            I2: GENERATED pins: file names, URLs, sizes, SHA-256 (do not edit)
   installer.py             I2: fetch, verify, unpack, record and activate the pinned wheels
+  storage.py               P1: the log as the krita-provenance.json annotation; start reason
 krita_provenance.desktop   plugin manifest Krita reads at startup
 scripts/dev_install.py     links this checkout into Krita's pykrita folder
 scripts/make_test_certs.py makes the test certificates in tests/fixtures/certs with OpenSSL
@@ -275,22 +299,14 @@ Raise these with the user rather than settling them silently.
   did), so on those machines the installer fetches c2pa-python alone, K1 is unavailable and
   K2's own certificate is the way to sign. The spec's matrix (Windows x64, macOS arm64, Linux
   x64) is fully covered.
-- Q5 and K4, provisional in `keys.py` and to raise with the user: keys are four unencrypted
-  PEM files with mode 0600 in a folder the glue chooses (the data-folder option of Q5; the OS
-  keychain is not built), valid 20 years (root) and 10 (signer), backdated a day for slow
-  clocks. The root key is kept beside the signer key with the same protection, so a theft takes
-  both; dropping it (rotation then makes a fresh root the user re-pins) or a passphrase (K4)
-  would change that. The fingerprint shown is the signer certificate's.
-- Where the data folder lives, and what the first-run dialog looks like, is the glue's (step
-  7): `installer.install` takes any folder, reports progress per wheel, and `keys.ensure`
-  takes any folder.
+- Q5, K4 and the data folder are decided (second set above). What the first-run dialog looks
+  like is the glue's; `installer.install` reports progress per wheel.
 - P1 says "before save", but Krita has no before-save signal. Debounced writes that keep the
   annotation current, as Krita AI Diffusion does, may be the answer; S4 checks it in Krita.
 - Q1 (generation as an action only, or also as an ingredient) waits on S5. Build the action-only
   form, with the choice in one place.
-- A document the plugin first sees after it already has content is decided (decision 2 above).
-  Still open for the Krita glue: what the export action does when such a document has never
-  been saved, since there is no .kra to be the parent. Saving first is the likely answer.
+- A document the plugin first sees after it already has content is decided (decision 2 above),
+  and an unsaved one at export gets the save/unsigned/cancel dialog (second set, 3).
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 

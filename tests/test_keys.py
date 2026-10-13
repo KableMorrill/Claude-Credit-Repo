@@ -149,8 +149,8 @@ def test_ensure_makes_the_keys_once_and_keeps_them_private(tmp_path: Path):
     assert files.exists()
     assert sorted(path.name for path in folder.iterdir()) == sorted(keys.FILES)
     if sys.platform != "win32":
-        for path in (files.root_key, files.key):
-            assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(files.key.stat().st_mode) == 0o600
+    assert not (folder / "root-ca.key").exists()  # discarded after issuing (decision 1)
     before = {path.name: path.read_bytes() for path in files.paths}
     again = keys.ensure(folder)
     assert again == files
@@ -211,7 +211,6 @@ def test_files_hold_exactly_the_generated_bytes_and_sign(
     )
     files = keys.ensure(tmp_path / "keys")
     assert files.key.read_bytes() == generated.key
-    assert files.root_key.read_bytes() == generated.root_key
     assert files.certificate.read_bytes() == generated.certificate
     assert files.root_certificate.read_bytes() == generated.root_certificate
     assert b"\r" not in files.key.read_bytes()

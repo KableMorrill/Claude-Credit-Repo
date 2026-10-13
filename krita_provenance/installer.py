@@ -136,8 +136,8 @@ def plan(
     if not all(package in names for package in K1_PACKAGES):
         chosen = [wheel for wheel in chosen if wheel.package not in K1_PACKAGES]
         unavailable.append(
-            "Local certificates (K1) are unavailable here: cryptography and cffi are installed"
-            " together or not at all"
+            "Key creation is not available on this platform yet (no cryptography wheel for it);"
+            " signing will need your own certificate when that lands (K2)"
         )
     return Plan(platform_key, python, tuple(chosen), tuple(unavailable))
 

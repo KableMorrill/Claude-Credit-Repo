@@ -411,7 +411,10 @@ def test_plan_picks_the_wheels_for_a_machine():
     assert [w.package for w in intel_mac.wheels] == ["c2pa-python"]
     assert not intel_mac.supports_k1
     assert any("cryptography" in message for message in intel_mac.unavailable)
-    assert any("K1" in message for message in intel_mac.unavailable)
+    assert any(
+        "K2" in message and "not available on this platform" in message
+        for message in intel_mac.unavailable
+    )
 
 
 def test_plan_refuses_a_machine_without_c2pa_python():

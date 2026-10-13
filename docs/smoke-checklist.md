@@ -23,3 +23,15 @@ Krita, Python and Krita AI Diffusion versions with the results.
 
 Each change that touches Krita adds its checks here, in the same commit: what to do in Krita and
 what should happen.
+
+### Annotation storage (spike S4)
+
+| # | In Krita | Expected |
+| --- | --- | --- |
+| 4 | New document, Tools ▸ Scripts ▸ Provenance: Log Status | A dialog with a document id, "Log started … (new_document)", "Events: none", "No AI generation observed by this plugin since …", and a note that the log was just created |
+| 5 | Save as .kra, close, reopen, run Log Status again | The same document id and start time; no "just created" note |
+| 6 | With Krita AI Diffusion active, generate once, save, reopen, run Log Status | Same document id; `ui.json` still works for Krita AI Diffusion (its history is intact) |
+| 7 | File ▸ Open a PNG or JPEG, run Log Status | "(opened_image)" and "Events: 1 ingredient_added" |
+| 8 | Open an older .kra made before the plugin, run Log Status | "(existing_document)" and "Events: 1 ingredient_added" |
+
+Record which Krita version and OS you used; S4 passes when 5 and 6 hold.

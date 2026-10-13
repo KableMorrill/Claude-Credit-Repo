@@ -15,11 +15,12 @@ mirrored from ``scripts/make_test_certs.py``:
 Validity is long because there is no timestamp authority yet (K3, Q4): without one a signature
 is only as valid as its certificate is at the moment someone checks it. K4 adds rotation.
 
-Storage is the data-folder option of Q5, which the spec's threat model backs with file
-permissions; the keychain option is open. Four PEM files in a folder the Krita glue chooses,
-the private keys unencrypted (K4 adds a passphrase) and created with mode 0600, which Windows
-ignores; the folder is per-user there. The root key stays, with the same protection, so K4 can
-issue a new signer certificate under the same CA; whether to keep it at all is a K4 question.
+Storage, decided 13 Oct 2026: three PEM files in a krita-provenance folder under Krita's app-data
+location, never inside the plugin folder, so a reinstall cannot delete keys. The signer key is
+unencrypted PKCS#8 (K4 adds a passphrase), created with mode 0600 where the OS honours it;
+on Windows the per-user profile folder is the only protection, and no more is claimed. The
+root key is discarded after issuing the signer certificate: rotation (K4) means a new root and
+signer with a new fingerprint, and a theft of the folder cannot mint further certificates.
 
 Names: the certificate's subject becomes ``signature_info.common_name`` in every manifest, so
 it carries no user or machine name (D1). The default is neutral, and K2 lets users bring their
@@ -51,10 +52,9 @@ BACKDATE = timedelta(days=1)  # a validator with a slower clock must not read "n
 ALGORITHM = "es256"
 
 ROOT_CERTIFICATE = "root-ca.pem"
-ROOT_KEY = "root-ca.key"
 CERTIFICATE = "signer.pem"
 KEY = "signer.key"
-FILES = (ROOT_CERTIFICATE, ROOT_KEY, CERTIFICATE, KEY)
+FILES = (ROOT_CERTIFICATE, CERTIFICATE, KEY)  # the root key is never written
 
 
 class KeysError(Exception):
@@ -68,7 +68,7 @@ class KeysUnavailable(KeysError):
 @dataclass(frozen=True)
 class GeneratedKeys:
     root_certificate: bytes  # PEM
-    root_key: bytes  # PEM, PKCS#8, unencrypted (K4 adds a passphrase)
+    root_key: bytes  # PEM, PKCS#8; kept in memory only, never written (decision 1, K4)
     certificate: bytes  # PEM
     key: bytes  # PEM, PKCS#8, unencrypted
 
@@ -103,17 +103,13 @@ class CertificateInfo:
 
 @dataclass(frozen=True)
 class KeyFiles:
-    """The four PEM files in the keys folder."""
+    """The three PEM files in the keys folder."""
 
     folder: Path
 
     @property
     def root_certificate(self) -> Path:
         return self.folder / ROOT_CERTIFICATE
-
-    @property
-    def root_key(self) -> Path:
-        return self.folder / ROOT_KEY
 
     @property
     def certificate(self) -> Path:
@@ -162,7 +158,6 @@ def ensure(folder: Path, common_name: str = DEFAULT_COMMON_NAME) -> KeyFiles:
         )
     generated = generate(common_name)
     folder.mkdir(parents=True, exist_ok=True)
-    _write_private(files.root_key, generated.root_key)
     _write_private(files.key, generated.key)
     files.root_certificate.write_bytes(generated.root_certificate)
     files.certificate.write_bytes(generated.certificate)
