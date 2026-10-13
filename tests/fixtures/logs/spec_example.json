@@ -1,0 +1,25 @@
+{
+  "schema": "krita-provenance/1",
+  "document_id": "4b0e2f1c-7d3a-4c1e-9b2f-0a6d5e8c1f22",
+  "log_started": {"at": "2026-11-02T18:04:11Z", "reason": "new_document"},
+  "events": [
+    {
+      "type": "generation_applied",
+      "at": "2026-11-02T18:20:45Z",
+      "source": {"tool": "krita-ai-diffusion", "version": "1.53.0", "backend": "local"},
+      "job": {"id": "9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f", "kind": "diffusion", "workflow_kind": "inpaint", "result_index": 2,
+              "bounds": [512, 128, 768, 640], "has_mask": true, "seed": 1234567},
+      "model": {"checkpoint": "dreamshaper_8.safetensors", "style": "Cinematic Photo", "sampler": "DPM++ 2M", "steps": 24,
+                "guidance": 4.5, "strength": 0.65},
+      "prompt": {"text": "stormy sky over a harbour", "negative": "text, watermark"},
+      "target_layer": {"uuid": "{3c1f9b7e-2d44-4a0b-9c6e-1f2a3b4c5d6e}", "name": "Sky"}
+    },
+    {"type": "layer_changed", "at": "2026-11-02T18:31:02Z", "layer": {"uuid": "{7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d}", "name": "Lineart"},
+     "bounds": [0, 0, 2048, 2048], "hash": "sha256:9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab"},
+    {"type": "ingredient_added", "at": "2026-11-02T18:35:40Z", "relationship": "componentOf",
+     "title": "background.png", "store": "krita-provenance/ingredient-1", "validation": "valid"},
+    {"type": "capture_gap", "from": "2026-11-02T18:40:00Z", "to": "2026-11-02T18:52:17Z", "reason": "adapter_error"},
+    {"type": "exported", "at": "2026-11-02T19:00:00Z", "format": "png", "disclosure": "standard",
+     "manifest_label": "urn:c2pa:0f6e1d2c-3b4a-4596-8778-99aabbccddee"}
+  ]
+}
