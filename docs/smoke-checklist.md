@@ -35,3 +35,9 @@ what should happen.
 | 8 | Open an older .kra made before the plugin, run Log Status | "(existing_document)" and "Events: 1 ingredient_added" |
 
 Record which Krita version and OS you used; S4 passes when 5 and 6 hold.
+
+## Results
+
+| Date | Setup | Rows | Result |
+| --- | --- | --- | --- |
+| 13 Oct 2026 | Windows 11, Krita 5.3.4.1 (git bd6e8d0), Python 3.13.5, PyQt5, Krita AI Diffusion 1.53.0 (loaded), c2pa-python not installed (the installer isn't wired yet) | 1–8 | All pass, after the window fix in ee9c96c. S1's Python check passes on Windows (3.13.5) and S4 passes: the log kept its id and start time through save and reopen, and Krita AI Diffusion's history survived beside it |

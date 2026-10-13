@@ -16,8 +16,9 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
 Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, head
 `ee9c96c`, CI green through `5952830`; the last two commits passed all four checks locally.
 
-Waiting on the user, who is testing in Krita 5.3 on Windows 11: smoke rows 1 to 8 (S1 and S4)
-and the Adobe Verify upload of `samples/` (S2). Start by asking for those results.
+Results in (13 Oct 2026, Opus session): smoke rows 1 to 8 pass on Windows 11 (S1's Python
+check and S4); the Adobe check (S2) is pending because Adobe's tools failed for every upload.
+The user tests each piece below that touches Krita before the next one starts.
 
 Then the rest of step 7, in this order, each piece committed with the four checks passing:
 
@@ -77,7 +78,7 @@ test modules.
      scrubbed in full (D1). Built.
   4. **Signed samples** for other validators live in `samples/`, made by
      `scripts/make_samples.py` from the goldens; `tests/test_samples.py` fails when they drift.
-     The Adobe Verify result is not yet recorded; the user uploads them.
+     The Adobe check is pending (S2, under "Not done").
 - **Also done (13 Oct, later):** K1 and I2, Krita-free and tested. `keys.py` makes the local
   root CA and signing certificate with `cryptography`; a golden signed with freshly made keys
   validates with the untrusted signer as the only failure code. `wheels.py`, `wheel_pins.py`
@@ -112,14 +113,27 @@ test modules.
   policy. `extension.py` adds Tools ▸ Scripts ▸ Provenance: Log Status, which creates the log
   if absent and shows the summary; docs/smoke-checklist.md rows 4 to 8 are the S4 check.
   First Krita run (Windows 11, Krita 5.3): both actions failed because their handlers kept
-  the createActions Window; fixed by looking the window up when the action fires. Rows 1 to 8
-  await a rerun.
+  the createActions Window; fixed by looking the window up when the action fires (ee9c96c).
+  **S4 passes** (13 Oct 2026; Windows 11, Krita 5.3.4.1, Python 3.13.5, PyQt5, Krita AI
+  Diffusion 1.53.0): smoke rows 1 to 8 pass. The log keeps its id and start time through save
+  and reopen, Krita AI Diffusion's history survives beside it, and opened PNGs and older .kra
+  files start with the right reason and parent.
 - **Not done:** the rest of step 7: debounced writes on capture, the Krita AI Diffusion adapter
   (C1–C3), first-run install and key creation in Krita, the export action with the dialog of
-  decision 3, the docker (V1) and the release zip (I1). Spikes S1, S3 and S5 haven't run; S4
-  waits on the user running rows 4 to 8; S2 waits on the Adobe Verify upload. The go/no-go note
-  is due 25 Oct 2026.
-- **Next:** wait for the user's S4 result, then the rest of step 7 in the order above.
+  decision 3, the docker (V1) and the release zip (I1). S1 is half done: the Python version is
+  checked on Windows, but loading c2pa-python inside Krita and signing from it wait on first
+  run (piece 2 of the handover). S3 and S5 haven't run. S2: c2pa-python and c2patool accept the
+  certificate profile and validate the samples, but the Adobe check is **pending**. On 13 Oct
+  2026 Adobe's Verify (verify.contentauthenticity.org) answered "Something went wrong" for
+  every upload, unrelated images included. Adobe Content Authenticity Inspect
+  (contentauthenticity.adobe.com/inspect) said "We couldn't verify how this was made" for every
+  upload, and for our samples only, also popped "Something went wrong". That may mean Inspect
+  found our manifests and failed on them, but the samples also differ from the other image in
+  size (16x16 pixels), so it isn't known whether the fault is the site's or the files'. Until
+  an Adobe tool reads them, c2patool and c2pa-python read-back are the verification of record.
+  The go/no-go note is due 25 Oct 2026.
+- **Next:** the rest of step 7 in the handover's order, stopping after each piece that touches
+  Krita for the user to test it.
 
 ## Layout
 
@@ -218,9 +232,10 @@ From the spec. Add tests for each as you implement it:
 Runtime:
 
 - The plugin runs on Krita's embedded Python with only the standard library and Krita's PyQt.
-  S1 (13 Oct 2026): Krita 5.3 on Windows 11 runs Python 3.11 or newer (its tracebacks carry
-  3.11's `~~~^^^` markers). Keep targeting 3.10: pyright and CI stay on it, so the plugin also
-  runs on older Krita builds and the pins cover 3.10 to 3.14.
+  S1 (13 Oct 2026, smoke row 2): Krita 5.3.4.1 on Windows 11 runs Python 3.13.5, which the
+  pins cover (cffi cp313, cryptography cp311-abi3, c2pa-python win_amd64). Keep targeting
+  3.10: pyright and CI stay on it, so the plugin also runs on older Krita builds and the pins
+  cover 3.10 to 3.14. macOS and Linux Krita builds are unchecked.
 - The third-party packages the plugin may use are c2pa-python 0.38.x, through `sdk.py`, and
   `cryptography` with its dependency `cffi` for K1 (decision 1 above), all fetched at first run.
   Dev and test tools can be anything.
