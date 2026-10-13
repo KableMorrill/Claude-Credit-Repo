@@ -17,7 +17,8 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
   of the order below, all Krita-free and tested: the log model (`log.py`), scrubbing (`scrub.py`),
   the log-to-manifest mapping with golden fixtures (`mapping.py`, `tests/fixtures/goldens`), and
   `sdk.py`, which signs PNG and JPEG with c2pa-python 0.38.0, reads them back and keeps E5 and E6.
-  Golden manifests sign and validate with an untrusted signer as the only failure code.
+  Golden manifests sign and validate with an untrusted signer as the only failure code, in
+  c2pa-python and in c2patool 0.28.2 (G3's two readers; `cargo install c2patool --locked`).
   `scripts/make_test_certs.py` makes a root CA and signing certificate with OpenSSL that c2pa-rs
   accepts (spike S2's profile); the test copies are in `tests/fixtures/certs`.
 - **Not done:** everything that touches Krita. Nothing is captured, stored in a .kra or exported
