@@ -1,11 +1,19 @@
 """The log's home in the document: the ``krita-provenance.json`` annotation (P1, spike S4).
 
 Krita-free. The glue (extension.py) reads the annotation bytes from a Document, hands them
-here, and writes back what ``serialize`` returns. Krita has no before-save signal, so writes
-are debounced: every append schedules a write a moment later, as Krita AI Diffusion does
-with ``ui.json``, and the glue flushes on its timer. The log itself is append-only (log.py).
+here, and writes back what ``serialize`` or ``append`` returns. The log itself is append-only
+(log.py).
 
-How a log starts, from the document's file name alone:
+Every change is written back at once, not debounced. P1 asks for writes "debounced and before
+save", but Krita has no before-save signal, and ``Notifier.imageSaved`` fires after the file is
+written: a write held back for a debounce would be missing from a save made in the meantime,
+and the saved .kra would lack the event. Events are rare (one per applied generation or
+export) and a write only replaces the annotation in memory, so writing at once costs little,
+and a save at any moment includes everything logged before it.
+
+The glue starts the log when Krita creates or opens a document (``Notifier.imageCreated``), so
+its start time is when the plugin began observing. How a log starts, from the document's file
+name alone:
 
 - no file name: a new document, ``new_document``;
 - an image file (png, jpg, ...): ``opened_image``, the file is the ``parentOf`` ingredient;
@@ -14,16 +22,14 @@ How a log starts, from the document's file name alone:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import log
-from .log import ANNOTATION, IngredientAdded, LogFormatError, ProvenanceLog
+from .log import ANNOTATION, Event, IngredientAdded, LogFormatError, ProvenanceLog
 from .mapping import ai_use_statement
 from .scrub import file_name
 
 DESCRIPTION = "krita-provenance log: AI generations and layer edits observed in this document"
-DEBOUNCE_SECONDS = 1.0
 DOCUMENT_SUFFIXES = (".kra", ".ora")
 
 
@@ -63,6 +69,19 @@ def start(file_name_: str | None, at: datetime | None = None) -> ProvenanceLog:
     return entry
 
 
+def append(annotation: bytes | None, file_name_: str | None, event: Event) -> bytes:
+    """The annotation's new bytes, with ``event`` at the end of its log; write them back at once.
+
+    A document without a log gets one first, started now from its file name (``start``). An
+    unreadable log raises StorageError and is never replaced (``read``).
+    """
+    entry = read(annotation)
+    if entry is None:
+        entry = start(file_name_)
+    entry.append(event)
+    return serialize(entry)
+
+
 def summary(entry: ProvenanceLog) -> str:
     """What the Log Status action shows: enough to see that the log survived a save."""
     kinds: dict[str, int] = {}
@@ -75,20 +94,3 @@ def summary(entry: ProvenanceLog) -> str:
         f"Events: {counts}",
         ai_use_statement(entry),
     ])
-
-
-@dataclass
-class Debounce:
-    """Decides when a pending write is due. Pure; the glue drives it from a timer."""
-
-    delay: float = DEBOUNCE_SECONDS
-    due_at: float | None = field(default=None, init=False)
-
-    def touch(self, now: float) -> None:
-        self.due_at = now + self.delay
-
-    def ready(self, now: float) -> bool:
-        return self.due_at is not None and now >= self.due_at
-
-    def clear(self) -> None:
-        self.due_at = None

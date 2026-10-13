@@ -8,7 +8,7 @@ import pytest
 
 from krita_provenance import log, storage
 from krita_provenance.log import CaptureGap, IngredientAdded, ProvenanceLog
-from krita_provenance.storage import Debounce, StorageError
+from krita_provenance.storage import StorageError
 
 T0 = datetime(2026, 11, 2, 18, 4, 11, tzinfo=timezone.utc)
 
@@ -59,16 +59,29 @@ def test_summary_names_the_document_and_counts_events():
     assert lines[3].startswith("No AI generation observed by this plugin since 2 November 2026.")
 
 
-def test_debounce_waits_for_quiet():
-    debounce = Debounce(delay=1.0)
-    assert not debounce.ready(5.0)
-    debounce.touch(5.0)
-    assert not debounce.ready(5.5)
-    debounce.touch(5.8)
-    assert not debounce.ready(6.5)
-    assert debounce.ready(6.8)
-    debounce.clear()
-    assert not debounce.ready(100.0)
+def test_append_keeps_every_past_event_and_adds_one_at_the_end():
+    entry = storage.start("harbour.png", T0)
+    entry.append(log.UnknownEvent("from_a_newer_version", {"type": "from_a_newer_version", "x": 1}))
+    gap = CaptureGap(T0, T0, log.ADAPTER_ERROR)
+    after = storage.read(storage.append(storage.serialize(entry), "ignored.kra", gap))
+    assert after is not None
+    assert after.document_id == entry.document_id and after.started == entry.started
+    assert after.events == [*entry.events, gap]
+
+
+def test_append_starts_a_log_from_the_file_name_when_there_is_none():
+    gap = CaptureGap(T0, T0, log.ADAPTER_ERROR)
+    for annotation in (None, b""):
+        after = storage.read(storage.append(annotation, "C:\\Art\\old.kra", gap))
+        assert after is not None and after.started.reason == log.EXISTING_DOCUMENT
+        assert after.events == [IngredientAdded(after.started.at, log.PARENT_OF, "old.kra"), gap]
+
+
+def test_append_never_replaces_a_log_it_cannot_read():
+    """Starting afresh would drop the history this version can't read (P3 migrates in v1.0)."""
+    for unreadable in (b'{"schema": "krita-provenance/9", "events": []}', b"{not json"):
+        with pytest.raises(StorageError, match="cannot be read"):
+            storage.append(unreadable, None, CaptureGap(T0, T0, log.ADAPTER_ERROR))
 
 
 def test_new_log_is_a_fresh_document_with_no_events():

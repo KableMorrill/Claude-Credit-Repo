@@ -11,10 +11,11 @@ those names.
 scope, the log format, the C2PA mapping, the threat model and the milestones. Requirement IDs
 (C1, P1, E1, …), spikes (S1–S5) and open questions (Q1–Q11) come from it.
 
-## Handover (13 Oct 2026, end of the Fable session)
+## Handover (13 Oct 2026, from the Fable session, updated by the Opus session)
 
-Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, head
-`ee9c96c`, CI green through `5952830`; the last two commits passed all four checks locally.
+Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, CI green
+through `5952830`; every later commit passed all four checks locally, from `c86d349` on in the
+user's Windows 11 checkout (Python 3.12 venv; not pushed by Claude, so CI hasn't run them).
 
 Results in (13 Oct 2026, Opus session): smoke rows 1 to 8 pass on Windows 11 (S1's Python
 check and S4); the Adobe check (S2) is pending because Adobe's tools failed for every upload.
@@ -22,9 +23,12 @@ The user tests each piece below that touches Krita before the next one starts.
 
 Then the rest of step 7, in this order, each piece committed with the four checks passing:
 
-1. Debounced annotation writes: `storage.Debounce` exists; drive it from a QTimer in
-   `extension.py` and flush on `Notifier.imageSaved`. Keep one `Debounce` per document id, not
-   per Document wrapper.
+1. Annotation writes. **Built 13 Oct 2026, waiting on smoke rows 9 to 11.** Planned as
+   debounced writes flushed on `Notifier.imageSaved`, but that signal fires after the file is
+   written, so a debounced event could miss a save. Built instead: every change is written at
+   once (`storage.append`; `Debounce` removed; storage.py's docstring has the reasoning), and
+   `Notifier.imageCreated` starts the log when Krita creates or opens a document. The user
+   hasn't yet agreed to dropping the debounce (open questions).
 2. First run: data folder = a `krita-provenance` subfolder under Krita's app-data location
    (`QStandardPaths.AppDataLocation`), never the plugin folder. `installer.plan()` then
    `installer.install(folder, plan, progress=...)` behind a progress dialog, `installer.activate`
@@ -118,7 +122,14 @@ test modules.
   Diffusion 1.53.0): smoke rows 1 to 8 pass. The log keeps its id and start time through save
   and reopen, Krita AI Diffusion's history survives beside it, and opened PNGs and older .kra
   files start with the right reason and parent.
-- **Not done:** the rest of step 7: debounced writes on capture, the Krita AI Diffusion adapter
+- **Step 7, piece 1, built (13 Oct 2026), unverified in Krita:** `extension.py` connects
+  `Notifier.imageCreated` and starts the log when Krita creates or opens a document (skipping
+  a document with no image yet), so `log_started.at` is when the plugin began observing it,
+  not when Log Status first ran. An unreadable log is left alone, with a warning shown after
+  the open. `storage.append` loads or starts the log, appends one event and returns the bytes
+  to write at once; nothing calls it yet (the adapter and the export will). Smoke rows 9 to 11
+  check it.
+- **Not done:** the rest of step 7: the Krita AI Diffusion adapter
   (C1–C3), first-run install and key creation in Krita, the export action with the dialog of
   decision 3, the docker (V1) and the release zip (I1). S1 is half done: the Python version is
   checked on Windows, but loading c2pa-python inside Krita and signing from it wait on first
@@ -350,7 +361,24 @@ Rely on these; check anything else against source.
 **Krita API stubs** (`scripts/typeshed/krita.pyi`): `Document` has `annotation`,
 `setAnnotation`, `annotationTypes`, `removeAnnotation`, `exportImage`, `topLevelNodes` and
 `nodeByUniqueID`; `Node` has `uniqueId`, `childNodes` and `bounds`. `Notifier.imageSaved` fires
-after a save; there is no before-save signal.
+after a save; there is no before-save signal. The stubs declare Notifier's signals as plain
+methods, so `.connect` on them needs a `pyright: ignore`.
+
+**Krita 5.3 source** (commit `bd6e8d0`, the build the user runs, read 13 Oct 2026):
+
+- `Document::setAnnotation` replaces the annotation in the image and doesn't mark the document
+  modified. It uses `d->document->image()` without a null check, so it must never be called on
+  a document with no image; `rootNode()` and `width()` do check, and return None or 0.
+- `Notifier::imageCreated` follows `KisPart::sigDocumentAdded`. It wraps the KisDocument in a
+  new `Document`, emits, and deletes the wrapper as soon as the handlers return. For a local
+  file, `KisMainWindow::openDocumentInternal` adds the document after `openPath` (or
+  `importDocument`) returns. libkis `Krita::createDocument` adds it before `newImage`, so a
+  script-made document has no image when the signal fires. An autosave being recovered still
+  has its autosave path then; Krita renames it afterwards.
+- `Notifier::setActive(false)` blocks the notifier's signals; it is shared, so the plugin only
+  ever sets it active.
+- The PNG exporter writes only the `kpp_version` and `kpp_preset` annotations, and the JPEG
+  exporter writes none: ordinary PNG and JPEG exports carry neither our log nor `ui.json`.
 
 ## Open technical questions
 
@@ -363,8 +391,16 @@ Raise these with the user rather than settling them silently.
   x64) is fully covered.
 - Q5, K4 and the data folder are decided (second set above). What the first-run dialog looks
   like is the glue's; `installer.install` reports progress per wheel.
-- P1 says "before save", but Krita has no before-save signal. Debounced writes that keep the
-  annotation current, as Krita AI Diffusion does, may be the answer; S4 checks it in Krita.
+- P1 says "debounced and before save", but Krita has no before-save signal and `imageSaved`
+  fires after the file is written. Piece 1 writes every change at once instead, so any save
+  includes it. Ask the user to confirm dropping the debounce; it is one place to change back.
+- A document with no file name may already have content when Krita creates it: Create from
+  Clipboard, a template, Open existing Document as Untitled, an unnamed autosave recovered.
+  Its log starts as `new_document`, which the mapping turns into `c2pa.created` from an empty
+  canvas, and that is false for it. Not settled; ask the user before the export action
+  (piece 4) ships. One option: at creation, treat the canvas as blank only if every layer is
+  empty or one flat colour, and otherwise use a start reason that the mapping discloses like
+  `existing_document`.
 - Q1 (generation as an action only, or also as an ingredient) waits on S5. Build the action-only
   form, with the choice in one place.
 - A document the plugin first sees after it already has content is decided (decision 2 above),

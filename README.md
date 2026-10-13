@@ -6,9 +6,11 @@ for artists who have to disclose AI use, such as on a US copyright application, 
 crowdfunding campaign, and it works alongside
 [Krita AI Diffusion](https://github.com/Acly/krita-ai-diffusion).
 
-> **Status: early development.** Nothing is recorded or exported from Krita yet. The plugin
-> loads in Krita and adds one menu item, Tools ▸ Scripts ▸ Provenance: Check Environment, which
-> reports the Python, Qt, Krita AI Diffusion and c2pa-python versions Krita can see. The
+> **Status: early development.** Nothing is exported from Krita yet. The plugin loads in Krita,
+> starts a provenance log in each document it sees created or opened, and adds two menu
+> items under Tools ▸ Scripts: Provenance: Check Environment, which reports the Python, Qt,
+> Krita AI Diffusion and c2pa-python versions Krita can see, and Provenance: Log Status, which
+> shows the document's log. Generations aren't recorded in the log yet. The
 > Krita-free core exists and is tested: the log format, scrubbing, the log-to-C2PA mapping,
 > signing with c2pa-python, local signing keys made with cryptography, and the pinned wheel
 > installer, with golden manifests that sign and validate. Capture and signed export inside

@@ -28,13 +28,24 @@ what should happen.
 
 | # | In Krita | Expected |
 | --- | --- | --- |
-| 4 | New document, Tools ▸ Scripts ▸ Provenance: Log Status | A dialog with a document id, "Log started … (new_document)", "Events: none", "No AI generation observed by this plugin since …", and a note that the log was just created |
+| 4 | New document, Tools ▸ Scripts ▸ Provenance: Log Status | A dialog with a document id, "Log started … (new_document)", "Events: none" and "No AI generation observed by this plugin since …". Since piece 1 (rows 9 to 11) there is no "just created" note: the log started with the document |
 | 5 | Save as .kra, close, reopen, run Log Status again | The same document id and start time; no "just created" note |
 | 6 | With Krita AI Diffusion active, generate once, save, reopen, run Log Status | Same document id; `ui.json` still works for Krita AI Diffusion (its history is intact) |
 | 7 | File ▸ Open a PNG or JPEG, run Log Status | "(opened_image)" and "Events: 1 ingredient_added" |
 | 8 | Open an older .kra made before the plugin, run Log Status | "(existing_document)" and "Events: 1 ingredient_added" |
 
 Record which Krita version and OS you used; S4 passes when 5 and 6 hold.
+
+### The log starts with the document (step 7, piece 1)
+
+The plugin starts a document's log when Krita creates it or opens it, without Log Status, and
+writes every change to the document at once. Log times are in UTC.
+
+| # | In Krita | Expected |
+| --- | --- | --- |
+| 9 | Note the time, File ▸ New, paint a stroke, wait a minute, save as .kra, close, reopen, then run Log Status (not before) | "(new_document)", started when you created the document, not when you saved it; no "just created" note |
+| 10 | Open a PNG or JPEG, save it as .kra without running Log Status, close, reopen the .kra, run Log Status | "(opened_image)" and "Events: 1 ingredient_added", started when you opened the image |
+| 11 | Open an older .kra made before the plugin and close it straight away | Krita doesn't ask to save: starting the log doesn't mark the document changed. Reopen it and run Log Status: "(existing_document)", started at the reopening, since the first log was never saved |
 
 ## Results
 
