@@ -35,7 +35,7 @@ ignore = ["E741"]
 [tool.pyright]
 include = ["krita_provenance", "scripts", "tests"]
 ignore = ["scripts/typeshed"]
-extraPaths = ["scripts/typeshed", "scripts"]
+extraPaths = ["scripts/typeshed", "scripts", "tests"]
 pythonVersion = "3.10"
 reportMissingModuleSource = false
 typeCheckingMode = "standard"

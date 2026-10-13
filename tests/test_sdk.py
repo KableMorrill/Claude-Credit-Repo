@@ -23,6 +23,7 @@ CERTS = FIXTURES / "certs"
 IMAGES = {
     "image/png": FIXTURES / "images" / "blank.png",
     "image/jpeg": FIXTURES / "images" / "blank.jpg",
+    mapping.KRITA_DOCUMENT: FIXTURES / "images" / "blank.kra",  # a .kra-shaped zip
 }
 SIGNER = SignerConfig((CERTS / "chain.pem").read_bytes(), (CERTS / "signer.key").read_bytes())
 SELF_SIGNED = SignerConfig((CERTS / "root.pem").read_bytes(), (CERTS / "root.key").read_bytes())

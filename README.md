@@ -84,7 +84,8 @@ installing a release zip, so the zip doesn't land in your checkout.
   in one place.
 
 The test certificates in `tests/fixtures/certs` are made by `scripts/make_test_certs.py` and are
-public; never sign anything real with them.
+public; never sign anything real with them. `samples/` holds exports signed with them, one per
+golden case, for checking the manifests in other validators.
 
 Krita's Python API is described by stubs in `scripts/typeshed`, copied from Krita AI Diffusion
 (details in the README there).

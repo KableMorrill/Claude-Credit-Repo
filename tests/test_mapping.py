@@ -48,7 +48,9 @@ def test_golden_manifest(name: str):
 @pytest.mark.parametrize("name", CASES)
 def test_golden_manifests_keep_prompts_paths_and_names_in_the_kra(name: str):
     entry, export, identity = load_case(name)
-    text = json.dumps(mapping.manifest(entry, export, identity).to_dict())
+    result = mapping.manifest(entry, export, identity).to_dict()
+    del result["definition"]["title"]  # typed by the user, kept as typed (decision of 13 Oct 2026)
+    text = json.dumps(result)
     for event in entry.events:
         if isinstance(event, GenerationApplied):
             assert event.prompt.text not in text
@@ -172,6 +174,50 @@ def test_an_opened_image_is_the_parent_and_a_placed_image_a_component():
     assert again.ingredients == result.ingredients  # ids are stable across exports
 
 
+def test_the_export_title_is_kept_as_typed_without_its_folder():
+    entry, export, identity = load_case("new_document")
+    assert export.title == "C:\\Users\\Kable Morrill\\Pictures\\harbour by kable.png"
+    assert mapping.manifest(entry, export, identity).definition["title"] == "harbour by kable.png"
+
+
+def test_an_existing_document_opens_its_kra_and_discloses_the_unobserved_past():
+    """Decision of 13 Oct 2026: never refuse to sign an older document; say what was not seen."""
+    entry, export, identity = load_case("existing_document")
+    result = mapping.manifest(entry, export, identity)
+    assert result.intent == mapping.EDIT
+    (parent,) = result.ingredients
+    assert parent.definition == {
+        "title": "harbour v3.kra",
+        "relationship": "parentOf",
+        "instance_id": parent.definition["instance_id"],
+    }
+    assert parent.format == mapping.KRITA_DOCUMENT
+    assert parent.store is None  # the bytes come from the saved file at export
+    actions = result.definition["assertions"][0]["data"]["actions"]
+    assert [a["action"] for a in actions] == [
+        "c2pa.opened",
+        "c2pa.unknown",
+        "c2pa.edited",
+        "c2pa.drawing",
+        "c2pa.converted",
+    ]
+    assert actions[0]["description"] == (
+        "Opened harbour v3.kra, a Krita document that already had content when this plugin"
+        " began observing it on 5 November 2026"
+    )
+    assert actions[0]["parameters"] == {"ingredientIds": [parent.definition["instance_id"]]}
+    assert "changes" not in actions[1]
+    assert actions[1]["description"] == (
+        "Content in harbour v3.kra from before 2026-11-05T14:00:00Z was not observed by this"
+        " plugin, which began observing the document on that date; earlier AI use, if any, is"
+        " not recorded here."
+    )
+    assert mapping.ai_use_statement(entry) == (
+        "1 AI generation observed by this plugin since 5 November 2026."
+        " The document already had content on that date; earlier AI use, if any, is not recorded."
+    )
+
+
 def test_ai_use_statement_reads_absence_as_not_observed():
     entry, _, _ = load_case("nothing_observed")
     assert (
@@ -223,16 +269,17 @@ def test_refuses_what_it_cannot_map_honestly():
     with pytest.raises(MappingError, match="new document"):
         mapping.manifest(fresh, Export("x.png", "png", T1), NO_ONE)
 
-    opened = ProvenanceLog("doc", LogStart(T0, log.OPENED_IMAGE))
-    with pytest.raises(MappingError, match="parentOf"):
-        mapping.manifest(opened, Export("x.png", "png", T1), NO_ONE)
-    opened.append(parent_event(T0))
-    opened.append(parent_event(T1))
-    with pytest.raises(MappingError, match="more than one"):
-        mapping.manifest(opened, Export("x.png", "png", T1), NO_ONE)
+    for reason in (log.OPENED_IMAGE, log.EXISTING_DOCUMENT):
+        opened = ProvenanceLog("doc", LogStart(T0, reason))
+        with pytest.raises(MappingError, match="parentOf"):
+            mapping.manifest(opened, Export("x.png", "png", T1), NO_ONE)
+        opened.append(parent_event(T0))
+        opened.append(parent_event(T1))
+        with pytest.raises(MappingError, match="more than one"):
+            mapping.manifest(opened, Export("x.png", "png", T1), NO_ONE)
 
-    other = ProvenanceLog("doc", LogStart(T0, "existing_document"))
-    with pytest.raises(MappingError, match="existing_document"):
+    other = ProvenanceLog("doc", LogStart(T0, "recovered"))
+    with pytest.raises(MappingError, match="recovered"):
         mapping.manifest(other, Export("x.png", "png", T1), NO_ONE)
 
 

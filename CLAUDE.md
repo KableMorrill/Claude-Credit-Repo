@@ -21,10 +21,24 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
   c2pa-python and in c2patool 0.28.2 (G3's two readers; `cargo install c2patool --locked`).
   `scripts/make_test_certs.py` makes a root CA and signing certificate with OpenSSL that c2pa-rs
   accepts (spike S2's profile); the test copies are in `tests/fixtures/certs`.
+- **Decisions of 13 Oct 2026**, from the user, to build on without reopening:
+  1. **K1:** generate the local root CA and signing certificate with the `cryptography` package,
+     fetched at first run beside c2pa-python, pinned and SHA-256 checked the same way as I2. No
+     OpenSSL binary, no hand-written crypto, no further spike. (So I2 fetches two wheels, and
+     `cryptography`'s dependency `cffi` must be checked and pinned too.)
+  2. **Documents that predate their log** (`log_started.reason` = `existing_document`): the saved
+     .kra is the `parentOf` ingredient of a `c2pa.opened` first action, followed by a
+     `c2pa.unknown` action saying that content from before the log's start was not observed.
+     Never refuse to sign. Built in `mapping.py`; golden case `existing_document`. The export
+     glue must have a saved .kra to hand the signer; an unsaved document needs a save first.
+  3. **The export title the user typed is kept as typed**, reduced to its file name, never the
+     folder. Everything captured automatically is still scrubbed in full (D1). Built.
+  4. **Signed samples** for other validators live in `samples/`, made by
+     `scripts/make_samples.py` from the goldens; regenerate them when the goldens change.
 - **Not done:** everything that touches Krita. Nothing is captured, stored in a .kra or exported
   from Krita yet. Spikes S1, S3, S4 and S5 haven't run; the go/no-go note is due 25 Oct 2026.
-- **Next:** step 5, K1, once the user has said how certificates should be generated (see Open
-  technical questions); then I2 and the Krita glue (step 7).
+- **Next:** step 5, K1, with `cryptography` (decision 1); then I2 for both wheels and the Krita
+  glue (step 7).
 
 ## Layout
 
@@ -41,10 +55,13 @@ krita_provenance/          the plugin package; Krita pairs it with krita_provena
 krita_provenance.desktop   plugin manifest Krita reads at startup
 scripts/dev_install.py     links this checkout into Krita's pykrita folder
 scripts/make_test_certs.py makes the test certificates in tests/fixtures/certs with OpenSSL
+scripts/make_samples.py    signs the goldens into samples/ for other validators
 scripts/typeshed/          Krita API stubs, vendored unmodified (see the README there)
+samples/                   signed sample exports, one per golden case (see the README there)
 tests/                     pytest; nothing needs Krita. goldens.py loads tests/fixtures/goldens
 tests/fixtures/goldens/    per case: log.json, export.json (what the exporter knew), manifest.json
 tests/fixtures/certs/      test root CA and signing certificate; never sign anything real with them
+tests/fixtures/images/     16x16 PNG and JPEG placeholders and a .kra-shaped zip for ingredients
 docs/spec.md               the project spec
 docs/smoke-checklist.md    checks the user runs inside Krita
 .github/workflows/ci.yml   CI on every push
@@ -92,6 +109,7 @@ From the spec. Add tests for each as you implement it:
 - E5: never add custom hash exclusions. E6: if signing fails, label the saved file unsigned; it
   must never look signed.
 - D1: scrub file paths, user names and machine names from every field that leaves the .kra.
+  The one exemption is the export title the user typed, kept as typed minus its folder.
 - Read imported manifests only through the SDK, cap their size, and show their text as plain text.
 - Keep prompt text out of exports for now. Disclosure levels and prompt commitments (D2, D3) are
   v1.0 work, and until then full prompts stay in the .kra.
@@ -102,8 +120,9 @@ Runtime:
 
 - The plugin runs on Krita's embedded Python with only the standard library and Krita's PyQt.
   Assume Python 3.10 until S1 says otherwise; pyright targets 3.10 and CI tests on it.
-- The only third-party package the plugin may use is c2pa-python 0.38.x, through `sdk.py`,
-  unless the user agrees to another (see K1 below). Dev and test tools can be anything.
+- The third-party packages the plugin may use are c2pa-python 0.38.x, through `sdk.py`, and
+  `cryptography` for K1 (decision 1 above), both fetched at first run. Dev and test tools can
+  be anything.
 - v1 targets Krita 5.3 and PyQt5; Krita 6 and PyQt6 depend on Q7. Type-checking uses PyQt5.
 - Put logic in Krita-free modules that take plain data; keep the Krita glue thin.
 - Never commit real keys or certificates. Test material goes in `tests/fixtures`.
@@ -204,20 +223,18 @@ after a save; there is no before-save signal.
 
 Raise these with the user rather than settling them silently.
 
-- K1 needs X.509 and ECDSA, which neither Krita's Python nor c2pa-python provides. One option is
-  fetching `cryptography` beside c2pa-python, at the cost of more wheels to pin and hash. Spike
-  S2 decides.
-- I2: c2pa-python works without its declared dependencies, so the plugin can unpack just its
-  wheel, unless K1's answer brings `cryptography` in anyway.
+- K1 is decided (decision 1 above): `cryptography`, fetched beside c2pa-python. Still open is
+  which `cryptography` version to pin and whether Krita's embedded Python on each OS can load
+  its native wheel (S1 territory); `cffi` comes with it.
+- I2: c2pa-python works without its declared dependencies, so the plugin unpacks its wheel plus
+  `cryptography` and `cffi` for K1, each pinned and SHA-256 checked.
 - P1 says "before save", but Krita has no before-save signal. Debounced writes that keep the
   annotation current, as Krita AI Diffusion does, may be the answer; S4 checks it in Krita.
 - Q1 (generation as an action only, or also as an ingredient) waits on S5. Build the action-only
   form, with the choice in one place.
-- A document the plugin first sees after it already has content (an older .kra) has no honest
-  first action: `c2pa.created` would need a digital source type nobody observed, and
-  `c2pa.opened` needs a parent file. `mapping.py` refuses any `log_started.reason` other than
-  `new_document` and `opened_image` until the user decides; the candidates are in the session
-  summary of 13 Oct 2026.
+- A document the plugin first sees after it already has content is decided (decision 2 above).
+  Still open for the Krita glue: what the export action does when such a document has never
+  been saved, since there is no .kra to be the parent. Saving first is the likely answer.
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 

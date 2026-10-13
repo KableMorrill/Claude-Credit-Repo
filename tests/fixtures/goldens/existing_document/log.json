@@ -1,0 +1,21 @@
+{
+  "schema": "krita-provenance/1",
+  "document_id": "4e0a6c5d-2f7b-4a8c-9d4e-5b6f7a8d9e01",
+  "log_started": {"at": "2026-11-05T14:00:00Z", "reason": "existing_document"},
+  "events": [
+    {"type": "ingredient_added", "at": "2026-11-05T14:00:00Z", "relationship": "parentOf",
+     "title": "C:\\Users\\Kable Morrill\\Art\\Commissions\\harbour v3.kra", "store": null, "validation": null},
+    {
+      "type": "generation_applied",
+      "at": "2026-11-05T14:22:10Z",
+      "source": {"tool": "krita-ai-diffusion", "version": "1.53.0", "backend": "local"},
+      "job": {"id": "job-0006", "kind": "diffusion", "workflow_kind": "inpaint", "result_index": 1,
+              "bounds": [200, 60, 640, 360], "has_mask": true, "seed": 31337},
+      "model": {"checkpoint": "dreamshaper_8.safetensors", "sampler": "Euler a", "steps": 28, "guidance": 6.0, "strength": 0.5},
+      "prompt": {"text": "calmer sky, early morning", "negative": "text"},
+      "target_layer": {"uuid": "{skyfix-0006}", "name": "Sky fix"}
+    },
+    {"type": "layer_changed", "at": "2026-11-05T14:40:00Z", "layer": {"uuid": "{sketch-0007}", "name": "Sketch"},
+     "bounds": [0, 0, 1800, 1200], "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"}
+  ]
+}

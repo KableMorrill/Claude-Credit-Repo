@@ -1,0 +1,21 @@
+# Signed samples
+
+Signed exports made from the golden cases in `tests/fixtures/goldens` by
+`scripts/make_samples.py`, for checking this plugin's manifests in other validators, such as
+Adobe's [Verify](https://verify.contentauthenticity.org) and `c2patool`.
+
+| File | Case | What its manifest says |
+| --- | --- | --- |
+| `new_document.png` | A blank canvas, one inpainted region, a layer edit, a capture gap | `c2pa.created` from an empty canvas, then edited, drawing, unknown, converted |
+| `nothing_observed.png` | A canvas with one layer edit and no AI | created, drawing, converted; no AI action |
+| `opened_image.jpg` | A photo opened in Krita, three generations, a placed logo | `c2pa.opened` from a `parentOf` ingredient, a hidden and a removed layer disclosed, `c2pa.placed` |
+| `spec_example.png` | The example log from docs/spec.md | created, edited, drawing, placed, unknown, converted |
+| `existing_document.png` | A .kra that had content before the plugin saw it | `c2pa.opened` from the .kra, then `c2pa.unknown` for the unobserved past |
+
+The pixels are a blank 16x16 image; the histories are the goldens' fictional ones. All are
+signed with the public test certificate in `tests/fixtures/certs`, so every validator should
+report the signer as unrecognized or untrusted and nothing else. In c2pa-python and c2patool
+0.28.2 the state is `Valid` with `signingCredential.untrusted` as the only failure code.
+
+Regenerate with `uv run python scripts/make_samples.py`. Labels, instance IDs and thumbnails
+change on every run; the actions do not.

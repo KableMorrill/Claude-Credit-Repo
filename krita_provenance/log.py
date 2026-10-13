@@ -30,6 +30,9 @@ ANNOTATION = "krita-provenance.json"  # Krita AI Diffusion uses ui.json and resu
 # log_started.reason
 NEW_DOCUMENT = "new_document"  # a blank canvas created in Krita while the plugin watched
 OPENED_IMAGE = "opened_image"  # opened from an image file, logged as a parentOf ingredient
+EXISTING_DOCUMENT = (
+    "existing_document"  # had content before the plugin saw it; its .kra is the parent
+)
 
 # capture_gap.reason (C3)
 PLUGIN_OFF = "plugin_off"
@@ -54,7 +57,7 @@ class LogFormatError(ValueError):
 @dataclass(frozen=True)
 class LogStart:
     at: datetime
-    reason: str  # NEW_DOCUMENT or OPENED_IMAGE; other values are kept but can't be mapped
+    reason: str  # NEW_DOCUMENT, OPENED_IMAGE or EXISTING_DOCUMENT; others are kept, not mapped
 
 
 @dataclass(frozen=True)

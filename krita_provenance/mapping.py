@@ -23,13 +23,17 @@ Honesty rules (spec: Threat model):
    still present, with the reason.
 4. Descriptions state what the plugin observed, never a conclusion about authorship.
 
-Open choices, kept here so they are easy to change (see the summary that reported them):
+Decisions of 13 Oct 2026 (CLAUDE.md, Where things stand) and open choices kept in one place:
 
+- A document that already had content when the plugin first saw it (``existing_document``) is
+  ``c2pa.opened`` from its saved .kra, the ``parentOf`` ingredient, followed by a ``c2pa.unknown``
+  action saying that content from before the log's start was not observed. It is never refused.
+- The export title the user typed is kept as typed, reduced to its file name; everything
+  captured automatically is scrubbed in full.
 - Prompts never leave the log until the disclosure levels land (D2, D3); the AI action's
   parameters are the spec example's: model, seed, steps and strength (S5 settles the keys).
 - Earlier ``exported`` events describe other output files and are not actions in this one.
-- A ``log_started.reason`` other than ``new_document`` or ``opened_image`` is refused, because
-  neither ``c2pa.created`` nor ``c2pa.opened`` would be an honest first action for it.
+- Any other ``log_started.reason`` is refused: neither first action would be honest for it.
 """
 
 from __future__ import annotations
@@ -53,7 +57,7 @@ from .log import (
     UnknownEvent,
     format_time,
 )
-from .scrub import Identity, scrub
+from .scrub import Identity, file_name, scrub
 
 CLAIM_GENERATOR = "krita-provenance"
 ACTIONS = "c2pa.actions.v2"
@@ -69,6 +73,14 @@ CREATE = "create"
 EDIT = "edit"
 
 FORMATS = {"png": "image/png", "jpeg": "image/jpeg"}  # E2; E3 adds WebP later
+KRITA_DOCUMENT = "application/x-krita"  # c2pa-rs accepts a .kra, a zip, as an ingredient under it
+INGREDIENT_FORMATS = {  # by suffix, before mimetypes, which differs between platforms
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".kra": KRITA_DOCUMENT,
+}
 
 TOOL_NAMES = {log.AI_DIFFUSION: "Krita AI Diffusion"}
 WORKFLOW_VERBS = {
@@ -162,20 +174,29 @@ def manifest(
             raise MappingError("A new document cannot also have been opened from a file")
         intent, source_type = CREATE, EMPTY
         actions.append(_action("c2pa.created", entry.started.at, krita, digitalSourceType=EMPTY))
-    elif reason == log.OPENED_IMAGE:
+    elif reason in (log.OPENED_IMAGE, log.EXISTING_DOCUMENT):
         if not parents:
-            raise MappingError("A document opened from an image needs a parentOf ingredient event")
+            raise MappingError(f"A log started as {reason!r} needs a parentOf ingredient event")
         intent, source_type = EDIT, None
         parent = _ingredient(entry, parents[0])
         ingredients.append(parent)
-        actions.append(
-            _action(
-                "c2pa.opened",
-                entry.started.at,
-                krita,
-                parameters={"ingredientIds": [parent.definition["instance_id"]]},
-            )
+        opened = _action(
+            "c2pa.opened",
+            entry.started.at,
+            krita,
+            parameters={"ingredientIds": [parent.definition["instance_id"]]},
         )
+        actions.append(opened)
+        if reason == log.EXISTING_DOCUMENT:
+            # The .kra already had content: say so on the opened action, and add an action with
+            # no changes, which C2PA reads as "anything may have changed", for the unobserved past.
+            opened["description"] = (
+                f"Opened {file_name(parents[0].title)}, a Krita document that already had content"
+                f" when this plugin began observing it on {_date(entry.started.at)}"
+            )
+            actions.append(
+                _action("c2pa.unknown", None, None, description=unobserved_statement(entry))
+            )
     else:
         raise MappingError(f"Log start reason {reason!r} has no honest C2PA first action")
 
@@ -231,8 +252,10 @@ def manifest(
         "assertions": [{"label": ACTIONS, "data": {"actions": actions}}],
     }
     identity = identity or Identity.current()
+    definition = scrub(definition, identity)
+    definition["title"] = file_name(export.title)  # typed by the user: kept, minus its folder
     return Manifest(
-        definition=scrub(definition, identity),
+        definition=definition,
         intent=intent,
         source_type=source_type,
         ingredients=tuple(
@@ -253,10 +276,27 @@ def ai_use_statement(entry: ProvenanceLog) -> str:
         count = len(generations)
         plural = "s" if count != 1 else ""
         text = f"{count} AI generation{plural} observed by this plugin since {since}."
+    if entry.started.reason == log.EXISTING_DOCUMENT:
+        text += " The document already had content on that date; earlier AI use, if any, is not recorded."
     if gaps:
         plural = "s" if len(gaps) != 1 else ""
         text += f" Capture was interrupted {len(gaps)} time{plural}; see the log for when."
     return text
+
+
+def unobserved_statement(entry: ProvenanceLog) -> str:
+    """For a document that predates its log: what the manifest cannot say about it."""
+    parents = [
+        e
+        for e in entry.events
+        if isinstance(e, IngredientAdded) and e.relationship == log.PARENT_OF
+    ]
+    what = f"Content in {file_name(parents[0].title)}" if parents else "Content in this document"
+    return (
+        f"{what} from before {format_time(entry.started.at)} was not observed by this plugin,"
+        " which began observing the document on that date; earlier AI use, if any, is not"
+        " recorded here."
+    )
 
 
 def _date(at: datetime) -> str:
@@ -350,7 +390,7 @@ def _generation(event: GenerationApplied, export: Export) -> dict[str, Any]:
 
 def _placed(event: IngredientAdded, component: Ingredient, krita: dict[str, Any]) -> dict[str, Any]:
     where = f" on layer {event.layer.name}" if event.layer else ""
-    description = f"Placed {event.title}{where}"
+    description = f"Placed {file_name(event.title)}{where}"  # a path with spaces would survive prose scrubbing
     changes = [_change(event.bounds, description)] if event.bounds else None
     return _action(
         "c2pa.placed",
@@ -371,10 +411,15 @@ def _ingredient(entry: ProvenanceLog, event: IngredientAdded) -> Ingredient:
             "relationship": event.relationship,
             "instance_id": instance_id,
         },
-        format=mimetypes.guess_type(event.title)[0],
+        format=_ingredient_format(event.title),
         store=event.store,
         validation=event.validation,
     )
+
+
+def _ingredient_format(title: str) -> str | None:
+    suffix = "." + file_name(title).rsplit(".", 1)[-1].lower() if "." in file_name(title) else ""
+    return INGREDIENT_FORMATS.get(suffix) or mimetypes.guess_type(file_name(title))[0]
 
 
 def _agent(name: str, version: str | None) -> dict[str, Any]:
