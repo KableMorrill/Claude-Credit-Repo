@@ -23,6 +23,7 @@ ALLOWED_IMPORTERS = {
     "PyQt5": {"qt.py"},
     "PyQt6": {"qt.py"},
     "c2pa": {"sdk.py"},
+    "cryptography": {"keys.py"},
     "ai_diffusion": {"adapters/ai_diffusion.py"},
 }
 
