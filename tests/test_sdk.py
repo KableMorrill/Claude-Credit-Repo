@@ -6,6 +6,7 @@ Spec: Testing and validation; E4, E5, E6. These tests need c2pa-python, a dev de
 from __future__ import annotations
 
 import json
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -114,6 +115,16 @@ def test_golden_manifests_sign_and_read_back(name: str, tmp_path: Path):
     assert (
         sdk.data_hash_exclusions(destination) and len(sdk.data_hash_exclusions(destination)) == 1
     )  # E5
+
+
+def test_the_signed_file_has_the_source_file_permissions(tmp_path: Path):
+    """mkstemp makes a private file; an export must be as readable as any other export."""
+    manifest, format_ = golden("nothing_observed")
+    source = source_for(format_, tmp_path)
+    source.chmod(0o644)
+    destination = tmp_path / "signed.png"
+    sdk.sign_file(source, destination, manifest, SIGNER)
+    assert stat.S_IMODE(destination.stat().st_mode) == stat.S_IMODE(source.stat().st_mode)
 
 
 def test_jpeg_and_png_both_sign(tmp_path: Path):

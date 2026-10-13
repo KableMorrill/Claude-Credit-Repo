@@ -29,6 +29,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
 import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -193,6 +194,7 @@ def sign_file(
             raise SigningError(
                 f"The data hash has {len(exclusions)} exclusions; exactly one is allowed"
             )
+        shutil.copymode(source, temporary)  # mkstemp made it private; an export is a normal file
     except SigningError:
         _remove(temporary)
         raise
