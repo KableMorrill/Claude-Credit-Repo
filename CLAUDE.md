@@ -11,6 +11,44 @@ those names.
 scope, the log format, the C2PA mapping, the threat model and the milestones. Requirement IDs
 (C1, P1, E1, …), spikes (S1–S5) and open questions (Q1–Q11) come from it.
 
+## Handover (13 Oct 2026, end of the Fable session)
+
+Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, head
+`ee9c96c`, CI green through `5952830`; the last two commits passed all four checks locally.
+
+Waiting on the user, who is testing in Krita 5.3 on Windows 11: smoke rows 1 to 8 (S1 and S4)
+and the Adobe Verify upload of `samples/` (S2). Start by asking for those results.
+
+Then the rest of step 7, in this order, each piece committed with the four checks passing:
+
+1. Debounced annotation writes: `storage.Debounce` exists; drive it from a QTimer in
+   `extension.py` and flush on `Notifier.imageSaved`. Keep one `Debounce` per document id, not
+   per Document wrapper.
+2. First run: data folder = a `krita-provenance` subfolder under Krita's app-data location
+   (`QStandardPaths.AppDataLocation`), never the plugin folder. `installer.plan()` then
+   `installer.install(folder, plan, progress=...)` behind a progress dialog, `installer.activate`
+   before any `sdk`/`keys` call, then `keys.ensure(folder / "keys")` and show
+   `KeyFiles.info().to_text()`. On a platform where `plan.supports_k1` is False, show the
+   message in `plan.unavailable`.
+3. Adapter `krita_provenance/adapters/ai_diffusion.py` (the only importer of `ai_diffusion`):
+   find the per-document model via `root.model_for_active_document()`, snapshot node unique
+   IDs before the apply, connect `jobs.result_used`, copy `JobParams` into a
+   `log.GenerationApplied`, and append a `CaptureGap` on any failure (C3). Facts are below.
+4. Export action: `Document.exportImage` to a temp PNG/JPEG, `mapping.manifest`,
+   `sdk.sign_file`; on `SigningError` save under `sdk.unsigned_name`. For an
+   `existing_document` with unsaved changes show "Save and export signed" / "Export unsigned" /
+   "Cancel" (never save silently). Label it neutrally, no "Content Credentials".
+5. Docker (V1) showing `storage.summary` and the events; release zip (I1).
+6. One review at the end, limited to E6 labelling, key creation and storage, the installer
+   hash check, and the log never losing events. Budget note: the three adversarial review
+   workflows this session cost more than all the implementation; do not run more than that one.
+
+Lessons that cost time this session: libkis wrappers die after the call that received them
+(rule below); ruff's preview formatter rewraps lines, so edit files with exact anchors read
+from disk, not from memory; `re.sub` interprets backslashes in replacements; pytest's
+importlib mode needs shared helpers on `pythonpath` (`tests/goldens.py`), not imported from
+test modules.
+
 ## Where things stand (13 Oct 2026)
 
 - **Done:** the repo scaffold and Tools ▸ Scripts ▸ Provenance: Check Environment. M1 steps 1–4
