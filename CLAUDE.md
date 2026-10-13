@@ -22,21 +22,28 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
   `scripts/make_test_certs.py` makes a root CA and signing certificate with OpenSSL that c2pa-rs
   accepts (spike S2's profile); the test copies are in `tests/fixtures/certs`.
 - **Decisions of 13 Oct 2026**, from the user, to build on without reopening:
-  1. **K1:** generate the local root CA and signing certificate with the `cryptography` package,
-     fetched at first run beside c2pa-python, pinned and SHA-256 checked the same way as I2. No
-     OpenSSL binary, no hand-written crypto, no further spike. (So I2 fetches two wheels, and
-     `cryptography`'s dependency `cffi` must be checked and pinned too.)
-  2. **Documents that predate their log** (`log_started.reason` = `existing_document`): the saved
-     .kra is the `parentOf` ingredient of a `c2pa.opened` first action, followed by a
-     `c2pa.unknown` action saying that content from before the log's start was not observed.
-     Never refuse to sign. Built in `mapping.py`; golden case `existing_document`. The export
-     glue must have a saved .kra to hand the signer; an unsaved document needs a save first.
+  1. **K1:** "fetch the cryptography wheel alongside c2pa-python at first run, pinned and
+     SHA-256 checked the same way as I2. No openssl or hand-written crypto. No further
+     exploration needed." Consequence (Claude's, not the user's): `cryptography`'s wheels need
+     `cffi` on CPython, so I2 fetches three wheels, c2pa-python, `cryptography` and `cffi`, each
+     pinned and hashed. S1, which loads c2pa-python inside Krita, should load these too.
+  2. **Documents that predate their log** (`log_started.reason` = `existing_document`): "treat
+     the saved .kra as the parentOf ingredient with c2pa.opened, and disclose that content
+     before the log's start date was not observed by this plugin. Don't refuse to sign." Built
+     in `mapping.py` (golden case `existing_document`): the start reason is never a ground for
+     refusal; the mapping still needs exactly one `parentOf` event, the saved .kra, which the
+     Krita glue must log before export. What the export action does for a document that has
+     never been saved is open (below).
   3. **The export title the user typed is kept as typed**, reduced to its file name, never the
-     folder. Everything captured automatically is still scrubbed in full (D1). Built.
+     folder; a title with no file name is refused. Everything captured automatically is still
+     scrubbed in full (D1). Built.
   4. **Signed samples** for other validators live in `samples/`, made by
-     `scripts/make_samples.py` from the goldens; regenerate them when the goldens change.
+     `scripts/make_samples.py` from the goldens; `tests/test_samples.py` fails when they drift.
+     The Adobe Verify result is not yet recorded; the user uploads them.
 - **Not done:** everything that touches Krita. Nothing is captured, stored in a .kra or exported
-  from Krita yet. Spikes S1, S3, S4 and S5 haven't run; the go/no-go note is due 25 Oct 2026.
+  from Krita yet. Spikes S1, S3, S4 and S5 haven't run; S2 is half done (c2pa-rs accepts the
+  OpenSSL-made test certificate; the Adobe Verify check waits on the samples, and the profile
+  is to be re-made with `cryptography` per decision 1). The go/no-go note is due 25 Oct 2026.
 - **Next:** step 5, K1, with `cryptography` (decision 1); then I2 for both wheels and the Krita
   glue (step 7).
 
@@ -121,8 +128,8 @@ Runtime:
 - The plugin runs on Krita's embedded Python with only the standard library and Krita's PyQt.
   Assume Python 3.10 until S1 says otherwise; pyright targets 3.10 and CI tests on it.
 - The third-party packages the plugin may use are c2pa-python 0.38.x, through `sdk.py`, and
-  `cryptography` for K1 (decision 1 above), both fetched at first run. Dev and test tools can
-  be anything.
+  `cryptography` with its dependency `cffi` for K1 (decision 1 above), all fetched at first run.
+  Dev and test tools can be anything.
 - v1 targets Krita 5.3 and PyQt5; Krita 6 and PyQt6 depend on Q7. Type-checking uses PyQt5.
 - Put logic in Krita-free modules that take plain data; keep the Krita glue thin.
 - Never commit real keys or certificates. Test material goes in `tests/fixtures`.
@@ -139,11 +146,11 @@ Testable, Krita-free work first; Krita glue last. Commit after each step with al
 4. `sdk.py`: sign PNG and JPEG, read the result back and report validation (E4), with E5 and E6.
    Add `c2pa-python==0.38.0` as a dev dependency for tests. Golden manifests are signed and read
    back; the only allowed warning is an untrusted signer.
-5. Keys (K1): local root CA, end-entity certificate, fingerprint. This needs a decision first
-   (Open technical questions).
-6. Installer (I2): download the platform's c2pa-python 0.38.0 wheel, check its SHA-256 against a
-   pinned table, unpack it into the plugin's data folder and import it lazily. Test with fake
-   downloads.
+5. Keys (K1): local root CA, end-entity certificate, fingerprint, made with `cryptography`
+   (decision 1) in the profile `scripts/make_test_certs.py` shows c2pa-rs accepts.
+6. Installer (I2): download the platform's c2pa-python 0.38.0, `cryptography` and `cffi` wheels,
+   check each SHA-256 against a pinned table, unpack them into the plugin's data folder and
+   import them lazily. Test with fake downloads.
 7. Krita glue: annotation storage (P1), the Krita AI Diffusion adapter (C1–C3), the export
    action through `Document.exportImage` (E1), the docker (V1) and the release zip (I1).
    Type-check against the stubs, and add steps to docs/smoke-checklist.md.
@@ -213,6 +220,9 @@ Rely on these; check anything else against source.
   `filterwarnings = error` is safe.
 - Regions come back with float coordinates; `ingredientIds` in action parameters are rewritten
   to hashed `ingredients` URIs; `claim_generator_info` gains `org.contentauth.c2pa_rs`.
+- A .kra (a zip) is accepted as a `parentOf` ingredient under `application/x-krita`, but its
+  `c2pa.ingredient.v3` assertion holds only the title, format, relationship and instance id: no
+  hash of the bytes and no thumbnail. The parent names the file; it does not bind to its bytes.
 
 **Krita API stubs** (`scripts/typeshed/krita.pyi`): `Document` has `annotation`,
 `setAnnotation`, `annotationTypes`, `removeAnnotation`, `exportImage`, `topLevelNodes` and
@@ -223,9 +233,8 @@ after a save; there is no before-save signal.
 
 Raise these with the user rather than settling them silently.
 
-- K1 is decided (decision 1 above): `cryptography`, fetched beside c2pa-python. Still open is
-  which `cryptography` version to pin and whether Krita's embedded Python on each OS can load
-  its native wheel (S1 territory); `cffi` comes with it.
+- K1 is decided (decision 1 above). Still to choose: which `cryptography` and `cffi` versions
+  to pin; take the newest with wheels for every platform in the CI matrix.
 - I2: c2pa-python works without its declared dependencies, so the plugin unpacks its wheel plus
   `cryptography` and `cffi` for K1, each pinned and SHA-256 checked.
 - P1 says "before save", but Krita has no before-save signal. Debounced writes that keep the

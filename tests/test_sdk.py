@@ -9,11 +9,10 @@ import json
 import stat
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from goldens import CASES, GOLDENS, load_case
+from goldens import CASES, GOLDENS, comparable, load_case, read_actions
 from krita_provenance import mapping, sdk
 from krita_provenance.mapping import Manifest
 from krita_provenance.sdk import IngredientData, ReadError, SignerConfig, SigningError
@@ -48,37 +47,6 @@ def source_for(format_: str, tmp_path: Path) -> Path:
     return source
 
 
-def read_actions(result: sdk.ReadResult) -> list[dict[str, Any]]:
-    data = json.loads(result.manifest_text)
-    active = data["manifests"][result.manifest_label]
-    (actions,) = [
-        a["data"]["actions"] for a in active["assertions"] if a["label"] == mapping.ACTIONS
-    ]
-    return actions
-
-
-def comparable(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """What survives signing unchanged: the SDK turns ingredientIds into hashed URIs and
-    writes region numbers as floats."""
-
-    def normalise(value: Any) -> Any:
-        if isinstance(value, dict):
-            return {
-                k: normalise(v)
-                for k, v in value.items()
-                if k not in ("ingredientIds", "ingredients")
-            }
-        if isinstance(value, list):
-            return [normalise(v) for v in value]
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, int):
-            return float(value)
-        return value
-
-    return [normalise(action) for action in actions]
-
-
 @pytest.mark.parametrize("name", CASES)
 def test_golden_manifests_sign_and_read_back(name: str, tmp_path: Path):
     manifest, format_ = golden(name)
@@ -111,6 +79,9 @@ def test_golden_manifests_sign_and_read_back(name: str, tmp_path: Path):
     ]
     assert [i["title"] for i in active.get("ingredients", [])] == [
         i.definition["title"] for i in manifest.ingredients
+    ]
+    assert [i["format"] for i in active.get("ingredients", [])] == [
+        i.format for i in manifest.ingredients
     ]
     assert next(a["action"] for a in read_actions(result)) in ("c2pa.created", "c2pa.opened")
     assert (

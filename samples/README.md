@@ -17,5 +17,7 @@ signed with the public test certificate in `tests/fixtures/certs`, so every vali
 report the signer as unrecognized or untrusted and nothing else. In c2pa-python and c2patool
 0.28.2 the state is `Valid` with `signingCredential.untrusted` as the only failure code.
 
-Regenerate with `uv run python scripts/make_samples.py`. Labels, instance IDs and thumbnails
-change on every run; the actions do not.
+Regenerate with `uv run python scripts/make_samples.py` whenever the goldens or the plugin
+version change; `tests/test_samples.py` fails until you do. The version in each manifest is the
+checkout's (`krita_provenance.__version__`), so it reads `0.1.0.dev0` where the goldens, which
+pin `0.1.0`, do not. Labels, instance IDs and thumbnails change on every run; the actions do not.

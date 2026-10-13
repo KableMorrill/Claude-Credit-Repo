@@ -39,6 +39,7 @@ Decisions of 13 Oct 2026 (CLAUDE.md, Where things stand) and open choices kept i
 from __future__ import annotations
 
 import mimetypes
+import re
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -79,6 +80,10 @@ INGREDIENT_FORMATS = {  # by suffix, before mimetypes, which differs between pla
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+    ".psd": "image/vnd.adobe.photoshop",
+    ".ora": "image/openraster",  # Krita saves working documents as .ora as well as .kra
     ".kra": KRITA_DOCUMENT,
 }
 
@@ -111,7 +116,7 @@ class LayerState:
 class Export:
     """What the exporter knows at export time, beyond the log."""
 
-    title: str  # the output file's name; scrubbed with the rest
+    title: str  # the output file's name as the user typed it; kept minus its folder, not scrubbed
     format: str  # a key of FORMATS
     at: datetime
     krita_version: str | None = None
@@ -155,6 +160,7 @@ def manifest(
         raise MappingError(
             f"Format {export.format!r} is not supported; use one of {sorted(FORMATS)}"
         )
+    title = typed_file_name(export.title)
 
     krita = _agent("Krita", export.krita_version)
     parents = [
@@ -191,8 +197,9 @@ def manifest(
             # The .kra already had content: say so on the opened action, and add an action with
             # no changes, which C2PA reads as "anything may have changed", for the unobserved past.
             opened["description"] = (
-                f"Opened {file_name(parents[0].title)}, a Krita document that already had content"
-                f" when this plugin began observing it on {_date(entry.started.at)}"
+                f"Began observing {file_name(parents[0].title)} on"
+                f" {format_time(entry.started.at)}, when it already had content; this plugin did"
+                " not see it being created or opened."
             )
             actions.append(
                 _action("c2pa.unknown", None, None, description=unobserved_statement(entry))
@@ -253,7 +260,7 @@ def manifest(
     }
     identity = identity or Identity.current()
     definition = scrub(definition, identity)
-    definition["title"] = file_name(export.title)  # typed by the user: kept, minus its folder
+    definition["title"] = title  # typed by the user: kept as typed, minus its folder (decision 3)
     return Manifest(
         definition=definition,
         intent=intent,
@@ -285,18 +292,34 @@ def ai_use_statement(entry: ProvenanceLog) -> str:
 
 
 def unobserved_statement(entry: ProvenanceLog) -> str:
-    """For a document that predates its log: what the manifest cannot say about it."""
-    parents = [
-        e
-        for e in entry.events
-        if isinstance(e, IngredientAdded) and e.relationship == log.PARENT_OF
-    ]
-    what = f"Content in {file_name(parents[0].title)}" if parents else "Content in this document"
+    """For a document that predates its log: what the manifest cannot say about it.
+
+    Names no file, so it is safe to show anywhere; the opened action beside it names the parent.
+    """
     return (
-        f"{what} from before {format_time(entry.started.at)} was not observed by this plugin,"
-        " which began observing the document on that date; earlier AI use, if any, is not"
-        " recorded here."
+        f"Content from before {format_time(entry.started.at)}, when this plugin began observing"
+        " this document, was not observed by this plugin as it was made; AI use before then, if"
+        " any, is not recorded here."
     )
+
+
+def typed_file_name(title: str) -> str:
+    """The file name in a title the user typed (decision 3): the name, never its folder.
+
+    Raises MappingError when there is no file name to keep, such as a bare folder, a drive or a
+    UNC host, which would otherwise leave unscrubbed.
+    """
+    stripped = title.strip()
+    parts = [part for part in _SEPARATORS.split(stripped) if part]
+    if stripped.startswith(("\\\\", "//")):
+        parts = parts[2:]  # host and share are not file names
+    if not parts or stripped.endswith(("/", "\\")) or _DRIVE.fullmatch(parts[-1]):
+        raise MappingError(f"The export title {title!r} has no file name")
+    return parts[-1]
+
+
+_SEPARATORS = re.compile(r"[\\/]+")
+_DRIVE = re.compile(r"[A-Za-z]:")
 
 
 def _date(at: datetime) -> str:

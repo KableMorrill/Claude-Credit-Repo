@@ -49,7 +49,9 @@ def test_golden_manifest(name: str):
 def test_golden_manifests_keep_prompts_paths_and_names_in_the_kra(name: str):
     entry, export, identity = load_case(name)
     result = mapping.manifest(entry, export, identity).to_dict()
-    del result["definition"]["title"]  # typed by the user, kept as typed (decision of 13 Oct 2026)
+    title = result["definition"].pop("title")  # typed by the user, kept as typed (decision 3)
+    assert "/" not in title and "\\" not in title
+    assert not identity.home or identity.home.lower() not in title.lower()
     text = json.dumps(result)
     for event in entry.events:
         if isinstance(event, GenerationApplied):
@@ -174,10 +176,61 @@ def test_an_opened_image_is_the_parent_and_a_placed_image_a_component():
     assert again.ingredients == result.ingredients  # ids are stable across exports
 
 
-def test_the_export_title_is_kept_as_typed_without_its_folder():
+@pytest.mark.parametrize(
+    "title",
+    [
+        "C:\\Users\\Kable Morrill\\Pictures\\harbour by kable.png",
+        "/home/kable/art/harbour by kable.png",
+        "\\\\studio-pc\\share\\harbour by kable.png",
+        "harbour by kable.png",
+        "  harbour by kable.png  ",
+    ],
+)
+def test_the_export_title_is_kept_as_typed_without_its_folder(title: str):
     entry, export, identity = load_case("new_document")
-    assert export.title == "C:\\Users\\Kable Morrill\\Pictures\\harbour by kable.png"
+    export = Export(title, export.format, export.at, export.krita_version, export.layers)
     assert mapping.manifest(entry, export, identity).definition["title"] == "harbour by kable.png"
+    assert mapping.typed_file_name(title) == "harbour by kable.png"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "",
+        "C:\\",
+        "/",
+        "/home/kable/art/",
+        "C:\\Users\\Kable Morrill\\",
+        "\\\\studio-pc",
+        "\\\\studio-pc\\share",
+    ],
+)
+def test_a_title_without_a_file_name_is_refused(title: str):
+    entry, export, identity = load_case("new_document")
+    export = Export(title, export.format, export.at, export.krita_version, export.layers)
+    with pytest.raises(MappingError, match="has no file name"):
+        mapping.manifest(entry, export, identity)
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("x.KRA", mapping.KRITA_DOCUMENT),
+        ("/home/kable/art/harbour v3.kra", mapping.KRITA_DOCUMENT),
+        ("C:\\k.m\\file", None),
+        ("x.webp", "image/webp"),
+        ("x.ora", "image/openraster"),
+        ("x.jpeg", "image/jpeg"),
+    ],
+)
+def test_ingredient_formats_come_from_the_suffix_table(title: str, expected: str | None):
+    assert mapping._ingredient_format(title) == expected
+
+
+def test_every_table_entry_resolves_without_mimetypes(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(mapping.mimetypes, "guess_type", lambda *_: (None, None))
+    for suffix, format_ in mapping.INGREDIENT_FORMATS.items():
+        assert mapping._ingredient_format(f"x{suffix}") == format_
 
 
 def test_an_existing_document_opens_its_kra_and_discloses_the_unobserved_past():
@@ -202,16 +255,17 @@ def test_an_existing_document_opens_its_kra_and_discloses_the_unobserved_past():
         "c2pa.converted",
     ]
     assert actions[0]["description"] == (
-        "Opened harbour v3.kra, a Krita document that already had content when this plugin"
-        " began observing it on 5 November 2026"
+        "Began observing harbour v3.kra on 2026-11-05T14:00:00Z, when it already had content;"
+        " this plugin did not see it being created or opened."
     )
     assert actions[0]["parameters"] == {"ingredientIds": [parent.definition["instance_id"]]}
     assert "changes" not in actions[1]
     assert actions[1]["description"] == (
-        "Content in harbour v3.kra from before 2026-11-05T14:00:00Z was not observed by this"
-        " plugin, which began observing the document on that date; earlier AI use, if any, is"
-        " not recorded here."
+        "Content from before 2026-11-05T14:00:00Z, when this plugin began observing this"
+        " document, was not observed by this plugin as it was made; AI use before then, if any,"
+        " is not recorded here."
     )
+    assert "harbour" not in actions[1]["description"]  # names no file: safe to show anywhere
     assert mapping.ai_use_statement(entry) == (
         "1 AI generation observed by this plugin since 5 November 2026."
         " The document already had content on that date; earlier AI use, if any, is not recorded."

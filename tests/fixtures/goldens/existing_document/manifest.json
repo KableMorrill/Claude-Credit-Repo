@@ -38,11 +38,11 @@
                   "xmp.iid:26ea4541-cd67-50fe-afba-a25d214ba233"
                 ]
               },
-              "description": "Opened harbour v3.kra, a Krita document that already had content when this plugin began observing it on 5 November 2026"
+              "description": "Began observing harbour v3.kra on 2026-11-05T14:00:00Z, when it already had content; this plugin did not see it being created or opened."
             },
             {
               "action": "c2pa.unknown",
-              "description": "Content in harbour v3.kra from before 2026-11-05T14:00:00Z was not observed by this plugin, which began observing the document on that date; earlier AI use, if any, is not recorded here."
+              "description": "Content from before 2026-11-05T14:00:00Z, when this plugin began observing this document, was not observed by this plugin as it was made; AI use before then, if any, is not recorded here."
             },
             {
               "action": "c2pa.edited",

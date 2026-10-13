@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from krita_provenance import log
+from krita_provenance import log, mapping, sdk
 from krita_provenance.log import ProvenanceLog
 from krita_provenance.mapping import Export, LayerState
 from krita_provenance.scrub import Identity
@@ -39,3 +39,35 @@ def load_case(name: str) -> tuple[ProvenanceLog, Export, Identity]:
     who = data["identity"]
     identity = Identity(tuple(who["user_names"]), who["home"], tuple(who["host_names"]))
     return entry, export, identity
+
+
+def read_actions(result: sdk.ReadResult) -> list[dict[str, Any]]:
+    """The actions of the active manifest in a read-back result."""
+    data = json.loads(result.manifest_text)
+    active = data["manifests"][result.manifest_label]
+    (actions,) = [
+        a["data"]["actions"] for a in active["assertions"] if a["label"] == mapping.ACTIONS
+    ]
+    return actions
+
+
+def comparable(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """What survives signing unchanged: the SDK turns ingredientIds into hashed URIs and
+    writes region numbers as floats."""
+
+    def normalise(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                k: normalise(v)
+                for k, v in value.items()
+                if k not in ("ingredientIds", "ingredients")
+            }
+        if isinstance(value, list):
+            return [normalise(v) for v in value]
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int):
+            return float(value)
+        return value
+
+    return [normalise(action) for action in actions]
