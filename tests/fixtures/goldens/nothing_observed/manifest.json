@@ -1,0 +1,67 @@
+{
+  "intent": "create",
+  "source_type": "http://c2pa.org/digitalsourcetype/empty",
+  "ingredients": [],
+  "definition": {
+    "claim_generator_info": [
+      {
+        "name": "krita-provenance",
+        "version": "0.1.0"
+      }
+    ],
+    "title": "study.png",
+    "assertions": [
+      {
+        "label": "c2pa.actions.v2",
+        "data": {
+          "actions": [
+            {
+              "action": "c2pa.created",
+              "when": "2026-11-04T07:45:00Z",
+              "softwareAgent": {
+                "name": "Krita"
+              },
+              "digitalSourceType": "http://c2pa.org/digitalsourcetype/empty"
+            },
+            {
+              "action": "c2pa.drawing",
+              "when": "2026-11-04T08:10:00Z",
+              "softwareAgent": {
+                "name": "Krita"
+              },
+              "changes": [
+                {
+                  "region": [
+                    {
+                      "type": "spatial",
+                      "shape": {
+                        "type": "rectangle",
+                        "unit": "pixel",
+                        "origin": {
+                          "x": 120,
+                          "y": 80
+                        },
+                        "width": 900,
+                        "height": 700
+                      }
+                    }
+                  ],
+                  "description": "Layer Paint changed"
+                }
+              ]
+            },
+            {
+              "action": "c2pa.converted",
+              "when": "2026-11-04T08:30:00Z",
+              "softwareAgent": {
+                "name": "krita-provenance",
+                "version": "0.1.0"
+              },
+              "description": "Exported from .kra to PNG"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

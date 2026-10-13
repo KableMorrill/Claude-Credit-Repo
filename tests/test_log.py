@@ -25,7 +25,7 @@ from krita_provenance.log import (
     UnknownEvent,
 )
 
-FIXTURES = Path(__file__).parent / "fixtures" / "logs"
+GOLDENS = Path(__file__).parent / "fixtures" / "goldens"
 UTC = timezone.utc
 T0 = datetime(2026, 11, 2, 18, 4, 11, tzinfo=UTC)
 
@@ -109,7 +109,9 @@ def test_json_is_the_spec_format():
 
 
 def test_reads_the_spec_example():
-    entry = ProvenanceLog.from_json((FIXTURES / "spec_example.json").read_text(encoding="utf-8"))
+    entry = ProvenanceLog.from_json(
+        (GOLDENS / "spec_example" / "log.json").read_text(encoding="utf-8")
+    )
     assert entry.started == LogStart(T0, log.NEW_DOCUMENT)
     kinds = [type(e) for e in entry.events]
     assert kinds == [GenerationApplied, LayerChanged, IngredientAdded, CaptureGap, Exported]

@@ -1,0 +1,43 @@
+{
+  "schema": "krita-provenance/1",
+  "document_id": "2c8e4a3b-0d5f-4e69-b7a2-3f4d5c6b7e8f",
+  "log_started": {"at": "2026-11-03T09:00:00Z", "reason": "opened_image"},
+  "events": [
+    {"type": "ingredient_added", "at": "2026-11-03T09:00:00Z", "relationship": "parentOf",
+     "title": "/home/kable/photos/harbour.jpg", "store": "krita-provenance/ingredient-1", "validation": null},
+    {
+      "type": "generation_applied",
+      "at": "2026-11-03T09:12:30Z",
+      "source": {"tool": "krita-ai-diffusion", "version": "1.53.0", "backend": "cloud"},
+      "job": {"id": "job-0002", "kind": "diffusion", "workflow_kind": "refine", "result_index": 0,
+              "bounds": [0, 0, 1600, 1200], "has_mask": false, "seed": 42},
+      "model": {"checkpoint": "juggernautXL_v9.safetensors", "steps": 20, "strength": 0.4},
+      "prompt": {"text": "sharper rigging, warm light", "negative": ""},
+      "target_layer": {"uuid": "{retouch-0002}", "name": "Retouch"}
+    },
+    {
+      "type": "generation_applied",
+      "at": "2026-11-03T09:20:00Z",
+      "source": {"tool": "krita-ai-diffusion", "version": "1.53.0", "backend": "cloud"},
+      "job": {"id": "job-0003", "kind": "diffusion", "workflow_kind": "generate", "result_index": 1,
+              "bounds": [0, 0, 1600, 400], "has_mask": false, "seed": 7},
+      "model": {"checkpoint": "juggernautXL_v9.safetensors", "steps": 30},
+      "prompt": {"text": "dramatic clouds", "negative": ""},
+      "target_layer": {"uuid": "{clouds-0003}", "name": "Clouds"}
+    },
+    {
+      "type": "generation_applied",
+      "at": "2026-11-03T09:25:00Z",
+      "source": {"tool": "krita-ai-diffusion", "version": "1.53.0", "backend": "cloud"},
+      "job": {"id": "job-0004", "kind": "diffusion", "workflow_kind": "inpaint", "result_index": 0,
+              "bounds": [900, 700, 300, 200], "has_mask": true, "seed": 99},
+      "model": {},
+      "prompt": {"text": "remove the buoy", "negative": ""},
+      "target_layer": null
+    },
+    {"type": "ingredient_added", "at": "2026-11-03T09:30:00Z", "relationship": "componentOf",
+     "title": "/home/kable/brand/logo.png", "store": "krita-provenance/ingredient-2", "validation": "valid",
+     "layer": {"uuid": "{logo-0005}", "name": "Logo"}, "bounds": [1400, 1000, 180, 180]},
+    {"type": "capture_gap", "from": "2026-11-03T09:31:00Z", "to": "2026-11-03T10:02:45Z", "reason": "plugin_off"}
+  ]
+}

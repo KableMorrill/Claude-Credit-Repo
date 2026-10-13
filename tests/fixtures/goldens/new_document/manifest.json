@@ -1,0 +1,109 @@
+{
+  "intent": "create",
+  "source_type": "http://c2pa.org/digitalsourcetype/empty",
+  "ingredients": [],
+  "definition": {
+    "claim_generator_info": [
+      {
+        "name": "krita-provenance",
+        "version": "0.1.0"
+      }
+    ],
+    "title": "harbour by [user].png",
+    "assertions": [
+      {
+        "label": "c2pa.actions.v2",
+        "data": {
+          "actions": [
+            {
+              "action": "c2pa.created",
+              "when": "2026-11-02T18:04:11Z",
+              "softwareAgent": {
+                "name": "Krita",
+                "version": "5.3.0"
+              },
+              "digitalSourceType": "http://c2pa.org/digitalsourcetype/empty"
+            },
+            {
+              "action": "c2pa.edited",
+              "when": "2026-11-02T18:20:45Z",
+              "softwareAgent": {
+                "name": "Krita AI Diffusion",
+                "version": "1.53.0"
+              },
+              "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/compositeWithTrainedAlgorithmicMedia",
+              "parameters": {
+                "seed": 1234567,
+                "model": "dreamshaper_8.safetensors",
+                "steps": 24,
+                "strength": 0.65
+              },
+              "changes": [
+                {
+                  "region": [
+                    {
+                      "type": "spatial",
+                      "shape": {
+                        "type": "rectangle",
+                        "unit": "pixel",
+                        "origin": {
+                          "x": 512,
+                          "y": 128
+                        },
+                        "width": 768,
+                        "height": 640
+                      }
+                    }
+                  ],
+                  "description": "Inpainted region on layer Sky (Krita AI Diffusion, inpaint)"
+                }
+              ]
+            },
+            {
+              "action": "c2pa.drawing",
+              "when": "2026-11-02T18:31:02Z",
+              "softwareAgent": {
+                "name": "Krita",
+                "version": "5.3.0"
+              },
+              "changes": [
+                {
+                  "region": [
+                    {
+                      "type": "spatial",
+                      "shape": {
+                        "type": "rectangle",
+                        "unit": "pixel",
+                        "origin": {
+                          "x": 0,
+                          "y": 0
+                        },
+                        "width": 2048,
+                        "height": 2048
+                      }
+                    }
+                  ],
+                  "description": "Layer Lineart changed"
+                }
+              ]
+            },
+            {
+              "action": "c2pa.unknown",
+              "when": "2026-11-02T18:40:00Z",
+              "description": "Capture gap from 2026-11-02T18:40:00Z to 2026-11-02T18:52:17Z (the Krita AI Diffusion adapter failed): AI generations in this period were not observed by this plugin."
+            },
+            {
+              "action": "c2pa.converted",
+              "when": "2026-11-02T19:00:00Z",
+              "softwareAgent": {
+                "name": "krita-provenance",
+                "version": "0.1.0"
+              },
+              "description": "Exported from .kra to PNG"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

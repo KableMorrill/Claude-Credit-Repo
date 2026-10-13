@@ -1,0 +1,9 @@
+{
+  "schema": "krita-provenance/1",
+  "document_id": "3d9f5b4c-1e6a-4f7a-c8b3-4a5e6d7c8f90",
+  "log_started": {"at": "2026-11-04T07:45:00Z", "reason": "new_document"},
+  "events": [
+    {"type": "layer_changed", "at": "2026-11-04T08:10:00Z", "layer": {"uuid": "{paint-0001}", "name": "Paint"},
+     "bounds": [120, 80, 900, 700], "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"}
+  ]
+}

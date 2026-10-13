@@ -1,0 +1,23 @@
+{
+  "schema": "krita-provenance/1",
+  "document_id": "1b7d3f2a-9c4e-4d58-a6f1-2e3c4b5a6d7e",
+  "log_started": {"at": "2026-11-02T18:04:11Z", "reason": "new_document"},
+  "events": [
+    {
+      "type": "generation_applied",
+      "at": "2026-11-02T18:20:45Z",
+      "source": {"tool": "krita-ai-diffusion", "version": "1.53.0", "backend": "local"},
+      "job": {"id": "job-0001", "kind": "diffusion", "workflow_kind": "inpaint", "result_index": 2,
+              "bounds": [512, 128, 768, 640], "has_mask": true, "seed": 1234567},
+      "model": {"checkpoint": "C:\\Users\\Kable Morrill\\ComfyUI\\models\\checkpoints\\dreamshaper_8.safetensors",
+                "style": "Cinematic Photo", "sampler": "DPM++ 2M", "steps": 24, "guidance": 4.5, "strength": 0.65},
+      "prompt": {"text": "stormy sky over kable's harbour, C:\\Users\\Kable Morrill\\refs\\sky.png", "negative": "text, watermark"},
+      "target_layer": {"uuid": "{sky-0001}", "name": "Sky"}
+    },
+    {"type": "layer_changed", "at": "2026-11-02T18:31:02Z", "layer": {"uuid": "{line-0001}", "name": "Lineart"},
+     "bounds": [0, 0, 2048, 2048], "hash": "sha256:9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab"},
+    {"type": "capture_gap", "from": "2026-11-02T18:40:00Z", "to": "2026-11-02T18:52:17Z", "reason": "adapter_error"},
+    {"type": "exported", "at": "2026-11-02T18:55:00Z", "format": "png", "disclosure": "standard",
+     "manifest_label": "urn:c2pa:0f6e1d2c-3b4a-4596-8778-99aabbccddee"}
+  ]
+}
