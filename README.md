@@ -36,6 +36,13 @@ Every manifest and report will follow these rules:
 Human edits will be recorded per layer at save and export, not per stroke, because Krita's API
 has no per-stroke events.
 
+## Project docs
+
+- [docs/spec.md](docs/spec.md): the project spec, covering goals, requirements, the log format,
+  the C2PA mapping, the threat model and milestones.
+- [docs/smoke-checklist.md](docs/smoke-checklist.md): checks to run by hand inside Krita.
+- [CLAUDE.md](CLAUDE.md): the working brief for Claude, with current state, rules and build order.
+
 ## Development
 
 You need [uv](https://docs.astral.sh/uv/). To try the plugin, you also need Krita 5.3 and
