@@ -161,8 +161,9 @@ def test_ensure_refuses_to_touch_a_partial_key_folder(tmp_path: Path):
     folder = tmp_path / "keys"
     folder.mkdir()
     (folder / keys.KEY).write_bytes(b"old key")
-    with pytest.raises(KeysError, match="move them aside"):
+    with pytest.raises(KeysError, match="move them aside") as error:
         keys.ensure(folder)
+    assert str(folder) not in str(error.value)
     assert (folder / keys.KEY).read_bytes() == b"old key"
     assert not (folder / keys.CERTIFICATE).exists()
 
@@ -177,21 +178,52 @@ def test_key_files_give_the_signer_config_and_info(tmp_path: Path):
     assert config.private_key == files.key.read_bytes()
     assert config.algorithm == "es256" and config.timestamp_url is None
     assert files.info().common_name == keys.DEFAULT_COMMON_NAME
-    with pytest.raises(KeysError, match="No signing keys"):
+    with pytest.raises(KeysError, match="No signing keys") as error:
         keys.KeyFiles(tmp_path / "nowhere").signer_config()
+    assert str(tmp_path) not in str(error.value)  # a path would name the user (D1)
 
 
-def test_without_cryptography_the_error_is_clear(monkeypatch: pytest.MonkeyPatch):
+def test_without_cryptography_the_error_is_clear(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """As in a Krita before the wheel arrived: no cryptography module cached anywhere."""
+    for name in [
+        name for name in sys.modules if name == "cryptography" or name.startswith("cryptography.")
+    ]:
+        monkeypatch.delitem(sys.modules, name)
     monkeypatch.setitem(sys.modules, "cryptography", None)
     assert not keys.available()
     with pytest.raises(KeysUnavailable, match="cryptography package is not installed"):
         keys.generate()
     with pytest.raises(KeysUnavailable):
         keys.describe(b"")
-    assert keys.available() is False
+    with pytest.raises(KeysUnavailable):
+        keys.fingerprint(b"")
+    with pytest.raises(KeysUnavailable):
+        keys.ensure(tmp_path / "keys")
+    assert not (tmp_path / "keys").exists()
+
+
+def test_files_hold_exactly_the_generated_bytes_and_sign(
+    tmp_path: Path, generated: keys.GeneratedKeys, monkeypatch
+):
+    """The on-disk path the glue uses: no text-mode rewriting on Windows, and the files sign."""
+    monkeypatch.setattr(
+        keys, "generate", lambda common_name=keys.DEFAULT_COMMON_NAME, now=None: generated
+    )
+    files = keys.ensure(tmp_path / "keys")
+    assert files.key.read_bytes() == generated.key
+    assert files.root_key.read_bytes() == generated.root_key
+    assert files.certificate.read_bytes() == generated.certificate
+    assert files.root_certificate.read_bytes() == generated.root_certificate
+    assert b"\r" not in files.key.read_bytes()
+    entry, export, identity = load_case("nothing_observed")
+    manifest = mapping.manifest(entry, export, identity)
+    source = tmp_path / "export.png"
+    shutil.copyfile(FIXTURES / "images" / "blank.png", source)
+    result = sdk.sign_file(source, tmp_path / "signed.png", manifest, files.signer_config())
+    assert result.validation.failures == (sdk.UNTRUSTED_SIGNER,)
 
 
 def test_cryptography_is_available_here():
     assert keys.available()
     assert keys.SIGNER_VALIDITY < keys.ROOT_VALIDITY
-    assert keys.BACKDATE == timedelta(minutes=5)
+    assert keys.BACKDATE == timedelta(days=1)  # public CAs backdate for slow clocks too

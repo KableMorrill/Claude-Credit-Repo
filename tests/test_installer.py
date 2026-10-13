@@ -9,13 +9,16 @@ import hashlib
 import importlib
 import io
 import json
+import os
 import sys
+import threading
+import time
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from krita_provenance import installer
+from krita_provenance import installer, wheels
 from krita_provenance.installer import InstallError, Plan
 from krita_provenance.wheels import Wheel
 
@@ -23,15 +26,21 @@ LINUX = "linux-x86_64"
 
 
 def make_wheel(
-    package: str, version: str, files: dict[str, bytes], platforms=(LINUX,), pythons=("3.10",)
+    package: str,
+    version: str,
+    files: dict[str, bytes],
+    platforms=(LINUX,),
+    pythons=("3.10",),
+    dist_info: bool = True,
 ) -> tuple[Wheel, bytes]:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         for name, data in files.items():
             archive.writestr(name, data)
-        archive.writestr(
-            f"{package}-{version}.dist-info/METADATA", f"Name: {package}\nVersion: {version}\n"
-        )
+        if dist_info:
+            archive.writestr(
+                f"{package}-{version}.dist-info/METADATA", f"Name: {package}\nVersion: {version}\n"
+            )
     data = buffer.getvalue()
     wheel = Wheel(
         package=package,
@@ -47,19 +56,27 @@ def make_wheel(
     return wheel, data
 
 
-def fake_fetch(contents: dict[str, bytes]):
-    calls: list[str] = []
+class FakeFetch:
+    """Serves wheels from memory and remembers what was asked for."""
 
-    def fetch(wheel: Wheel, destination: Path, progress) -> None:
-        calls.append(wheel.filename)
-        if wheel.filename not in contents:
+    def __init__(self, contents: dict[str, bytes], delay: float = 0.0) -> None:
+        self.contents = contents
+        self.delay = delay
+        self.calls: list[str] = []
+
+    def __call__(self, wheel: Wheel, destination: Path, progress) -> None:
+        self.calls.append(wheel.filename)
+        if wheel.filename not in self.contents:
             raise InstallError(f"no fake for {wheel.filename}")
-        destination.write_bytes(contents[wheel.filename])
+        if self.delay:
+            time.sleep(self.delay)
+        destination.write_bytes(self.contents[wheel.filename])
         if progress is not None:
             progress(wheel, wheel.size, wheel.size)
 
-    fetch.calls = calls  # type: ignore[attr-defined]
-    return fetch
+
+def fake_fetch(contents: dict[str, bytes], delay: float = 0.0) -> FakeFetch:
+    return FakeFetch(contents, delay)
 
 
 @pytest.fixture
@@ -80,13 +97,15 @@ def beta():
     )
 
 
-def plan_for(*wheels: Wheel) -> Plan:
-    return Plan(LINUX, "3.10", tuple(wheels))
+def plan_for(*items: Wheel) -> Plan:
+    return Plan(LINUX, "3.10", tuple(items))
 
 
-def test_install_unpacks_verified_wheels_and_records_them(
-    tmp_path: Path, alpha, beta, monkeypatch: pytest.MonkeyPatch
-):
+def this_machine(*items: Wheel) -> Plan:
+    return Plan(wheels.platform_key(), wheels.python_key(), tuple(items))
+
+
+def test_install_unpacks_verified_wheels_and_records_them(tmp_path: Path, alpha, beta):
     data = tmp_path / "data"
     fetch = fake_fetch({alpha[0].filename: alpha[1], beta[0].filename: beta[1]})
     seen: list[tuple[str, int, int]] = []
@@ -114,15 +133,35 @@ def test_install_unpacks_verified_wheels_and_records_them(
         (beta[0].filename, beta[0].size, beta[0].size),
     ]
     assert list((data / "downloads").iterdir()) == []
-    assert not (data / "site-packages.new").exists()
+    assert not list(data.glob("site-packages.new-*")) and not list(data.glob("site-packages.old-*"))
 
+
+def test_activate_imports_from_an_install_made_for_this_machine(tmp_path: Path, alpha, monkeypatch):
+    data = tmp_path / "data"
+    installer.install(data, this_machine(alpha[0]), fake_fetch({alpha[0].filename: alpha[1]}))
+    site = installer.site_packages(data).resolve()
     monkeypatch.setattr(sys, "path", list(sys.path))
-    monkeypatch.delitem(sys.modules, "alpha", raising=False)
-    assert installer.activate(data) == site
-    assert sys.path[0] == str(site)
-    assert importlib.import_module("alpha").VERSION == "1.0"
-    installer.activate(data)
-    assert sys.path.count(str(site)) == 1
+    try:
+        assert installer.activate(data) == site
+        assert sys.path[0] == str(site)
+        assert importlib.import_module("alpha").VERSION == "1.0"
+        installer.activate(data)
+        assert sys.path.count(str(site)) == 1
+    finally:
+        sys.modules.pop("alpha", None)
+        sys.path_importer_cache.pop(str(site), None)
+
+
+def test_activate_ignores_an_install_for_another_machine(tmp_path: Path, alpha, monkeypatch):
+    data = tmp_path / "data"
+    other = "win32-arm64" if wheels.platform_key() != "win32-arm64" else "linux-arm64"
+    installer.install(
+        data, Plan(other, "3.10", (alpha[0],)), fake_fetch({alpha[0].filename: alpha[1]})
+    )
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    assert installer.activate(data) is None
+    assert str(installer.site_packages(data).resolve()) not in sys.path
+    assert installer.activate(tmp_path / "elsewhere") is None
 
 
 def test_nothing_is_installed_from_a_wheel_with_the_wrong_hash(tmp_path: Path, alpha):
@@ -134,10 +173,20 @@ def test_nothing_is_installed_from_a_wheel_with_the_wrong_hash(tmp_path: Path, a
     assert not installer.site_packages(data).exists()
     assert installer.installed(data) is None
     assert list((data / "downloads").iterdir()) == []
+    assert not list(data.glob("site-packages.new-*"))
     wrong_size = Wheel(**{**vars(wheel), "size": wheel.size + 1})
     with pytest.raises(InstallError, match="bytes; the pinned wheel is"):
         installer.install(data, plan_for(wrong_size), fake_fetch({wheel.filename: content}))
     assert not installer.site_packages(data).exists()
+
+
+def test_verification_happens_before_anything_is_unpacked(tmp_path: Path, alpha):
+    """Bytes that are not even a zip fail on the digest, not on unpacking."""
+    wheel = alpha[0]
+    with pytest.raises(InstallError, match="does not match its pinned SHA-256"):
+        installer.install(
+            tmp_path / "data", plan_for(wheel), fake_fetch({wheel.filename: b"x" * wheel.size})
+        )
 
 
 def test_a_failed_install_keeps_the_previous_one(tmp_path: Path, alpha, beta):
@@ -151,7 +200,7 @@ def test_a_failed_install_keeps_the_previous_one(tmp_path: Path, alpha, beta):
         LINUX, "3.10", {"alpha": "1.0"}, (alpha[0].filename,)
     )
     assert (installer.site_packages(data) / "alpha" / "__init__.py").is_file()
-    assert not (data / "site-packages.new").exists()
+    assert not list(data.glob("site-packages.new-*"))
 
 
 def test_a_newer_install_replaces_the_old_one(tmp_path: Path, alpha):
@@ -166,7 +215,103 @@ def test_a_newer_install_replaces_the_old_one(tmp_path: Path, alpha):
     assert installer.installed(data) == installer.Installed(
         LINUX, "3.10", {"alpha": "1.1"}, (newer.filename,)
     )
-    assert not (data / "site-packages.old").exists()
+    assert not list(data.glob("site-packages.old-*"))
+
+
+def test_two_installs_at_once_leave_one_complete_install(tmp_path: Path, alpha, beta):
+    """Two Krita processes on first run must not damage each other's work."""
+    data = tmp_path / "data"
+    wanted = plan_for(alpha[0], beta[0])
+    contents = {alpha[0].filename: alpha[1], beta[0].filename: beta[1]}
+    outcomes: list[object] = []
+
+    def run() -> None:
+        try:
+            outcomes.append(installer.install(data, wanted, fake_fetch(contents, delay=0.05)))
+        except InstallError as error:  # acceptable: the other run won
+            outcomes.append(error)
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert any(isinstance(outcome, installer.Installed) for outcome in outcomes)
+    site = installer.site_packages(data)
+    assert installer.is_current(data, wanted)
+    assert (site / "alpha" / "__init__.py").is_file() and (site / "beta.py").is_file()
+    assert not list(data.glob("site-packages.new-*"))
+
+
+def test_a_record_that_lists_a_missing_package_is_not_trusted(tmp_path: Path, alpha, beta):
+    data = tmp_path / "data"
+    wanted = plan_for(alpha[0], beta[0])
+    installer.install(
+        data, wanted, fake_fetch({alpha[0].filename: alpha[1], beta[0].filename: beta[1]})
+    )
+    import shutil
+
+    shutil.rmtree(installer.site_packages(data) / "beta-2.0.dist-info")
+    assert installer.installed(data) is None
+    assert not installer.is_current(data, wanted)
+    assert installer.activate(data) is None
+
+
+def test_a_swap_that_keeps_failing_keeps_the_verified_folder_for_next_time(
+    tmp_path: Path, alpha, monkeypatch
+):
+    data = tmp_path / "data"
+    fetch = fake_fetch({alpha[0].filename: alpha[1]})
+    monkeypatch.setattr(installer, "SWAP_ATTEMPTS", 2)
+    monkeypatch.setattr(installer.time, "sleep", lambda seconds: None)
+
+    def locked(source: Path, destination: Path) -> None:
+        raise PermissionError("busy")
+
+    monkeypatch.setattr(installer, "_rename", locked)
+    with pytest.raises(InstallError, match="restart Krita and run the install again"):
+        installer.install(data, plan_for(alpha[0]), fetch)
+    staged = list(data.glob("site-packages.new-*"))
+    assert len(staged) == 1 and (staged[0] / installer.RECORD).is_file()
+    assert installer.installed(data) is None
+
+    monkeypatch.undo()
+    monkeypatch.setattr(installer.time, "sleep", lambda seconds: None)
+    result = installer.install(data, plan_for(alpha[0]), fetch)  # adopts the staged folder
+    assert result.packages == {"alpha": "1.0"}
+    assert fetch.calls == [alpha[0].filename]  # nothing was downloaded again
+    assert not list(data.glob("site-packages.new-*"))
+
+
+def test_a_briefly_locked_swap_is_retried(tmp_path: Path, alpha, monkeypatch):
+    data = tmp_path / "data"
+    attempts: list[int] = []
+    real = installer._rename
+
+    def flaky(source: Path, destination: Path) -> None:
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise PermissionError("busy")
+        real(source, destination)
+
+    monkeypatch.setattr(installer, "_rename", flaky)
+    monkeypatch.setattr(installer.time, "sleep", lambda seconds: None)
+    installer.install(data, plan_for(alpha[0]), fake_fetch({alpha[0].filename: alpha[1]}))
+    assert installer.is_current(data, plan_for(alpha[0]))
+    assert len(attempts) >= 3
+
+
+def test_stale_staging_folders_are_removed(tmp_path: Path, alpha):
+    data = tmp_path / "data"
+    stale = data / "site-packages.new-99999"
+    stale.mkdir(parents=True)
+    old_time = time.time() - installer.STALE_AFTER - 60
+    os.utime(stale, (old_time, old_time))
+    fresh = data / "site-packages.new-99998"
+    fresh.mkdir()
+    installer.install(data, plan_for(alpha[0]), fake_fetch({alpha[0].filename: alpha[1]}))
+    assert not stale.exists()
+    assert fresh.exists()  # another live install's folder is left alone
 
 
 @pytest.mark.parametrize(
@@ -197,10 +342,21 @@ def test_installed_record_is_read_defensively(tmp_path: Path):
     assert installer.installed(tmp_path) is None
     (site / installer.RECORD).write_text(json.dumps({"platform": LINUX}), encoding="utf-8")
     assert installer.installed(tmp_path) is None
-    assert installer.activate(tmp_path / "elsewhere") is None
 
 
-def test_download_streams_hashes_and_caps_the_size(tmp_path: Path, alpha):
+def test_dist_info_names():
+    assert (
+        installer.dist_info("c2pa_python-0.38.0-py3-none-win_amd64.whl")
+        == "c2pa_python-0.38.0.dist-info"
+    )
+    assert (
+        installer.dist_info("cryptography-50.0.2-cp39-abi3-win_amd64.whl")
+        == "cryptography-50.0.2.dist-info"
+    )
+    assert installer.dist_info("cffi-2.1.1-cp310-cp310-win_amd64.whl") == "cffi-2.1.1.dist-info"
+
+
+def test_download_streams_and_caps_the_size(tmp_path: Path, alpha):
     wheel, content = alpha
 
     class Response(io.BytesIO):
@@ -263,6 +419,19 @@ def test_plan_refuses_a_machine_without_c2pa_python():
         installer.plan("linux-x86_64", "3.10", glibc=(2, 17))  # c2pa-python needs 2.28
     newer = installer.plan("linux-x86_64", "3.10", glibc=(2, 28))
     assert [w.package for w in newer.wheels] == ["c2pa-python", "cryptography", "cffi"]
+
+
+def test_plan_reports_an_unsupported_machine_as_an_install_error(monkeypatch):
+    def unsupported() -> str:
+        raise wheels.NoWheel("No pinned wheels for freebsd14 on amd64")
+
+    monkeypatch.setattr(wheels, "platform_key", unsupported)
+    with pytest.raises(InstallError, match="No pinned wheels for freebsd14"):
+        installer.plan()
+    with pytest.raises(
+        InstallError, match=r"No pinned c2pa-python wheel for linux-x86_64 on Python 3\.9"
+    ):
+        installer.plan("linux-x86_64", "3.9")
 
 
 def test_plan_for_this_machine():

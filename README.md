@@ -9,9 +9,10 @@ crowdfunding campaign, and it works alongside
 > **Status: early development.** Nothing is recorded or exported from Krita yet. The plugin
 > loads in Krita and adds one menu item, Tools ▸ Scripts ▸ Provenance: Check Environment, which
 > reports the Python, Qt, Krita AI Diffusion and c2pa-python versions Krita can see. The
-> Krita-free core exists and is tested: the log format, scrubbing, the log-to-C2PA mapping and
-> signing with c2pa-python, with golden manifests that sign and validate. Capture and signed
-> export inside Krita are planned for v0.1.
+> Krita-free core exists and is tested: the log format, scrubbing, the log-to-C2PA mapping,
+> signing with c2pa-python, local signing keys made with cryptography, and the pinned wheel
+> installer, with golden manifests that sign and validate. Capture and signed export inside
+> Krita are planned for v0.1.
 
 `krita-provenance` is a working title.
 
@@ -82,10 +83,11 @@ installing a release zip, so the zip doesn't land in your checkout.
 - c2pa-python is used only through `krita_provenance/sdk.py`, cryptography only through
   `krita_provenance/keys.py`, and Krita AI Diffusion's internals only through
   `krita_provenance/adapters/ai_diffusion.py`, so changes upstream stay in one place.
-- The plugin's own copies of c2pa-python, cryptography and cffi are fetched on first run,
+- The plugin's own copies of c2pa-python, cryptography and cffi will be fetched on first run,
   checked against the sizes and SHA-256 digests pinned in `krita_provenance/wheel_pins.py`,
-  and unpacked into the plugin's data folder. `scripts/update_wheel_pins.py` regenerates the
-  pins from PyPI.
+  and unpacked into the plugin's data folder. The installer and the pin table exist and are
+  tested; the Krita glue that runs them at first run is not built yet.
+  `scripts/update_wheel_pins.py` regenerates the pins from PyPI.
 
 The test certificates in `tests/fixtures/certs` are made by `scripts/make_test_certs.py` and are
 public; never sign anything real with them. `samples/` holds exports signed with them, one per

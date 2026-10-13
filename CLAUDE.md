@@ -46,8 +46,10 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
   and `installer.py` fetch c2pa-python 0.38.0, cryptography 50.0.2 and cffi 2.1.1 for this
   platform and Python, verify size and SHA-256 against the pins, unpack them into the data
   folder and put them first on `sys.path`; `scripts/update_wheel_pins.py` regenerates the pins
-  from PyPI. A real install on this Linux x86_64 machine imported all three from the unpacked
-  folder.
+  from PyPI. Real installs on this Linux x86_64 machine, on Python 3.13 and on Python 3.10 (the
+  set Krita 5 fetches: c2pa-python manylinux_2_28, cryptography cp39-abi3, cffi cp310),
+  downloaded, verified and unpacked all three, and a clean Python imported them from the
+  folder. The macOS and Windows wheel sets have not been fetched through the installer.
 - **Not done:** everything that touches Krita. Nothing is captured, stored in a .kra or exported
   from Krita yet; keys are not yet made, and wheels not yet fetched, from inside Krita. Spikes
   S1, S3, S4 and S5 haven't run; S2 is half done (c2pa-rs accepts both the OpenSSL-made test
@@ -115,8 +117,10 @@ Enforced by `tests/test_architecture.py`:
 - `cryptography` is imported only in `krita_provenance/keys.py`, lazily, for the same reason;
   cryptography 50.0.2 is a dev dependency, the version the plugin fetches.
 - `wheel_pins.py` is generated. To change a pinned version, edit `PINS` in
-  `scripts/update_wheel_pins.py`, run it, bump the dev dependency to match, and review the
-  diff: those digests are what every download is checked against.
+  `scripts/update_wheel_pins.py`, run it, bump the dev dependency to match
+  (`tests/test_wheel_pins.py` checks that pyproject's pins equal `PINS`), update the versions
+  and the K1 gaps that `tests/test_wheel_pins.py` and `tests/test_installer.py` spell out, and
+  review the diff: those digests are what every download is checked against.
 - `ai_diffusion` is imported only in `krita_provenance/adapters/ai_diffusion.py`.
 - `version` in pyproject.toml equals `krita_provenance.__version__` (`tests/test_version.py`).
 
@@ -250,7 +254,9 @@ Rely on these; check anything else against source.
   Windows. It needs glibc 2.28 on Linux.
 - cryptography 50.0.2: `cp39-abi3` and `cp311-abi3` wheels (one file covers every CPython from
   that minor on) for manylinux_2_17 x86_64 and aarch64, macOS 11 arm64 and win_amd64; about
-  4 MB. No macOS Intel, no Windows ARM, no 32-bit.
+  4 MB. No macOS Intel, no Windows ARM, no win32 or i686. PyPI's release files, read on 13 Oct
+  2026, show 46.0.3 (Oct 2025) as the last release with a macOS Intel (`macosx_10_9_x86_64`)
+  wheel and a `win_arm64` wheel; 46.0.4 onwards has neither.
 - cffi 2.1.1: one wheel per CPython minor (3.10 to 3.15) for manylinux_2_17, macOS 10.15 x86_64
   and 11 arm64, win_amd64 and, from 3.11, win_arm64; about 200 KB.
 - Free-threaded (`cp314t`) and PyPy wheels exist and are skipped: Krita's Python is neither.
@@ -265,10 +271,16 @@ after a save; there is no before-save signal.
 Raise these with the user rather than settling them silently.
 
 - K1 and I2 are built. Pinned: cryptography 50.0.2 and cffi 2.1.1, the newest at the time.
-  cryptography has shipped no macOS Intel wheel since 46.0.4 and no Windows ARM wheel since
-  46.0.3, so on those machines the installer fetches c2pa-python alone, K1 is unavailable and
+  cryptography 50.0.2 ships no macOS Intel and no Windows ARM wheel (46.0.3 was the last that
+  did), so on those machines the installer fetches c2pa-python alone, K1 is unavailable and
   K2's own certificate is the way to sign. The spec's matrix (Windows x64, macOS arm64, Linux
   x64) is fully covered.
+- Q5 and K4, provisional in `keys.py` and to raise with the user: keys are four unencrypted
+  PEM files with mode 0600 in a folder the glue chooses (the data-folder option of Q5; the OS
+  keychain is not built), valid 20 years (root) and 10 (signer), backdated a day for slow
+  clocks. The root key is kept beside the signer key with the same protection, so a theft takes
+  both; dropping it (rotation then makes a fresh root the user re-pins) or a passphrase (K4)
+  would change that. The fingerprint shown is the signer certificate's.
 - Where the data folder lives, and what the first-run dialog looks like, is the glue's (step
   7): `installer.install` takes any folder, reports progress per wheel, and `keys.ensure`
   takes any folder.

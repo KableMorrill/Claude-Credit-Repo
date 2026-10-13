@@ -8,14 +8,20 @@ Under the data folder the Krita glue chooses:
 
     site-packages/                the unpacked wheels, laid out like a venv's site-packages
     site-packages/installed.json  what is there: platform, Python, package versions, wheels
+    site-packages.new-<id>/       an install being built; adopted or removed by a later run
     downloads/                    wheels while they download and verify; emptied afterwards
 
-A new install is built in ``site-packages.new`` and swapped in only when every wheel has
-verified and unpacked, so a failed install leaves the previous one as it was. ``activate``
-puts ``site-packages`` first on ``sys.path`` so the plugin's verified copies win over anything
-else Krita's Python can see; ``sdk.py`` and ``keys.py`` import on demand after that. Once
-``c2pa`` has been imported, a newer install takes effect at the next Krita start, because its
-native library stays loaded.
+Each install builds its own ``site-packages.new-<id>`` and swaps it into place only when every
+wheel has verified and unpacked, so a failed install leaves the previous one as it was, and two
+installs at once (two Krita processes on first run, or two threads) cannot damage each other. If the swap
+itself fails, as Windows does while a native library from the old install is loaded, the
+verified folder is kept and adopted by the next install without downloading again. The record
+is trusted only while every recorded wheel's ``dist-info`` folder is still there.
+
+``activate`` puts ``site-packages`` first on ``sys.path`` when it was built for this platform
+and Python, so the plugin's verified copies win over anything else Krita's Python can see;
+``sdk.py`` and ``keys.py`` import on demand after that. Once ``c2pa`` has been imported, a newer
+install takes effect at the next Krita start, because its native library stays loaded.
 
 Which wheels: c2pa-python always (I2); cryptography and cffi for K1 (decision 1 of 13 Oct
 2026), both or neither, since cffi is only there for cryptography. A platform without a
@@ -27,9 +33,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
+import time
 import urllib.request
+import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -45,6 +54,8 @@ K1_PACKAGES = ("cryptography", "cffi")
 SITE_PACKAGES = "site-packages"
 RECORD = "installed.json"
 CHUNK = 1024 * 1024
+STALE_AFTER = 24 * 60 * 60  # seconds; a staging folder older than this belongs to no live install
+SWAP_ATTEMPTS = 5
 
 Progress = Callable[[Wheel, int, int], None]  # wheel, bytes so far, bytes expected
 Fetch = Callable[[Wheel, Path, "Progress | None"], None]  # writes the wheel to the path
@@ -95,11 +106,14 @@ def plan(
     ``glibc`` is the glibc version to check manylinux wheels against. With the platform left to
     detection it is looked up too; with an explicit platform, None means no check.
     """
-    if platform_key is None:
-        platform_key = wheels.platform_key()
-        if glibc is None and platform_key.startswith("linux"):
-            glibc = wheels.glibc_version()
-    python = python or wheels.python_key()
+    try:
+        if platform_key is None:
+            platform_key = wheels.platform_key()
+            if glibc is None and platform_key.startswith("linux"):
+                glibc = wheels.glibc_version()
+        python = python or wheels.python_key()
+    except NoWheel as error:
+        raise InstallError(str(error)) from error
     pins = tuple(pins)
     chosen: list[Wheel] = []
     unavailable: list[str] = []
@@ -133,35 +147,28 @@ def site_packages(data_folder: Path) -> Path:
 
 
 def installed(data_folder: Path) -> Installed | None:
-    """What a previous install recorded, or None if there is none or it can't be read."""
-    try:
-        data = json.loads((site_packages(data_folder) / RECORD).read_text(encoding="utf-8"))
-        return Installed(
-            str(data["platform"]),
-            str(data["python"]),
-            {str(k): str(v) for k, v in data["packages"].items()},
-            tuple(str(w) for w in data.get("wheels", [])),
-        )
-    except (OSError, ValueError, KeyError, AttributeError, TypeError):
-        return None
+    """What the install records, or None when there is none, it can't be read, or a recorded
+    wheel's dist-info folder is gone (then it is reinstalled rather than trusted)."""
+    return _read_record(site_packages(data_folder))
 
 
 def is_current(data_folder: Path, wanted: Plan) -> bool:
     """True when the install matches the plan, so nothing needs fetching."""
-    current = installed(data_folder)
-    return (
-        current is not None
-        and current.platform == wanted.platform
-        and current.python == wanted.python
-        and current.packages == wanted.packages
-    )
+    return _matches(installed(data_folder), wanted)
 
 
 def activate(data_folder: Path) -> Path | None:
-    """Put the installed packages first on sys.path. Returns the folder, or None if none."""
-    site = site_packages(data_folder)
-    if not (site / RECORD).is_file():
+    """Put the installed packages first on sys.path, if they were built for this platform and
+    Python. Returns the folder, or None if there is nothing usable."""
+    current = installed(data_folder)
+    if current is None:
         return None
+    try:
+        if (current.platform, current.python) != (wheels.platform_key(), wheels.python_key()):
+            return None
+    except NoWheel:
+        return None
+    site = site_packages(data_folder).resolve()
     entry = str(site)
     if entry not in sys.path:
         sys.path.insert(0, entry)
@@ -174,45 +181,25 @@ def install(
     fetch: Fetch | None = None,
     progress: Progress | None = None,
 ) -> Installed:
-    """Fetch, verify and unpack every wheel in the plan, then swap the result into place."""
+    """Fetch, verify and unpack every wheel in the plan, then swap the result into place.
+
+    A verified folder left by an earlier run whose swap failed is adopted instead, without
+    fetching anything.
+    """
     fetch = fetch or download
-    downloads = data_folder / "downloads"
-    staging = data_folder / f"{SITE_PACKAGES}.new"
-    _remove_tree(staging)
-    downloads.mkdir(parents=True, exist_ok=True)
-    staging.mkdir(parents=True)
     try:
-        for wheel in wanted.wheels:
-            target = downloads / wheel.filename
-            try:
-                fetch(wheel, target, progress)
-                verify_file(wheel, target)
-                unpack(target, staging)
-            finally:
-                target.unlink(missing_ok=True)
-        record = {
-            "platform": wanted.platform,
-            "python": wanted.python,
-            "packages": wanted.packages,
-            "wheels": [wheel.filename for wheel in wanted.wheels],
-        }
-        (staging / RECORD).write_text(json.dumps(record, indent=2), encoding="utf-8")
+        data_folder.mkdir(parents=True, exist_ok=True)
+        _remove_stale_staging(data_folder)
+        staged = _find_staged(data_folder, wanted)
+        if staged is None:
+            staged = _build(data_folder, wanted, fetch, progress)
+        _swap_in(data_folder, staged)
     except InstallError:
-        _remove_tree(staging)
         raise
     except Exception as error:
-        _remove_tree(staging)
         raise InstallError(f"Installing the wheels failed: {error}") from error
-
-    site = site_packages(data_folder)
-    old = data_folder / f"{SITE_PACKAGES}.old"
-    _remove_tree(old)
-    if site.exists():
-        site.rename(old)
-    staging.rename(site)
-    _remove_tree(old)  # best effort; Windows keeps a loaded native library busy until restart
     result = installed(data_folder)
-    if result is None:
+    if result is None or not _matches(result, wanted):
         raise InstallError("The install could not be read back")
     return result
 
@@ -224,7 +211,6 @@ def download(
     opener: Callable[..., Any] = urllib.request.urlopen,
 ) -> None:
     """Stream the wheel from PyPI to ``destination``, never past its pinned size."""
-    digest = hashlib.sha256()
     received = 0
     try:
         with opener(wheel.url, timeout=60) as response, open(destination, "wb") as output:
@@ -235,7 +221,6 @@ def download(
                         f"{wheel.filename} is larger than the pinned {wheel.size} bytes;"
                         " the download was abandoned"
                     )
-                digest.update(chunk)
                 output.write(chunk)
                 if progress is not None:
                     progress(wheel, received, wheel.size)
@@ -293,24 +278,121 @@ def unpack(wheel_path: Path, destination: Path) -> None:
         raise InstallError(f"{wheel_path.name} is not a wheel: {error}") from error
 
 
+def dist_info(wheel_filename: str) -> str:
+    """The dist-info folder a wheel unpacks to: c2pa_python-0.38.0.dist-info."""
+    name, version = wheel_filename.split("-", 2)[:2]
+    return f"{name}-{version}.dist-info"
+
+
+def _build(data_folder: Path, wanted: Plan, fetch: Fetch, progress: Progress | None) -> Path:
+    """Download, verify and unpack into this process's own staging folder."""
+    downloads = data_folder / "downloads"
+    run_id = (
+        f"{os.getpid()}-{uuid.uuid4().hex[:8]}"  # unique per call, across processes and threads
+    )
+    staging = data_folder / f"{SITE_PACKAGES}.new-{run_id}"
+    downloads.mkdir(parents=True, exist_ok=True)
+    staging.mkdir(parents=True)
+    try:
+        for wheel in wanted.wheels:
+            target = downloads / f"{wheel.filename}.{run_id}.part"
+            try:
+                fetch(wheel, target, progress)
+                verify_file(wheel, target)
+                unpack(target, staging)
+            finally:
+                target.unlink(missing_ok=True)
+        record = {
+            "platform": wanted.platform,
+            "python": wanted.python,
+            "packages": wanted.packages,
+            "wheels": [wheel.filename for wheel in wanted.wheels],
+        }
+        (staging / RECORD).write_text(json.dumps(record, indent=2), encoding="utf-8")
+    except BaseException:
+        _remove_tree(staging)
+        raise
+    return staging
+
+
+def _find_staged(data_folder: Path, wanted: Plan) -> Path | None:
+    """A complete staging folder for this plan, left by a run whose swap failed."""
+    for staging in sorted(data_folder.glob(f"{SITE_PACKAGES}.new-*")):
+        if _matches(_read_record(staging), wanted):
+            return staging
+    return None
+
+
+def _remove_stale_staging(data_folder: Path) -> None:
+    """Staging folders older than STALE_AFTER were left by crashed runs."""
+    now = time.time()
+    for staging in data_folder.glob(f"{SITE_PACKAGES}.new-*"):
+        try:
+            if now - staging.stat().st_mtime > STALE_AFTER:
+                _remove_tree(staging)
+        except OSError:
+            pass
+
+
+def _swap_in(data_folder: Path, staging: Path) -> None:
+    """Make ``staging`` the site-packages, retrying while a file is briefly locked (Windows)."""
+    site = site_packages(data_folder)
+    old = data_folder / f"{SITE_PACKAGES}.old-{staging.name.split('new-', 1)[1]}"
+    for attempt in range(SWAP_ATTEMPTS):
+        try:
+            if site.exists():
+                _rename(site, old)
+            _rename(staging, site)
+            break
+        except OSError as error:
+            if attempt == SWAP_ATTEMPTS - 1:
+                raise InstallError(
+                    "The downloaded packages verified but could not be moved into place"
+                    f" ({error}); restart Krita and run the install again, it will finish"
+                    " without downloading"
+                ) from error
+            time.sleep(0.2 * (attempt + 1))
+    _remove_tree(old)  # best effort; Windows keeps a loaded native library busy until restart
+
+
+def _rename(source: Path, destination: Path) -> None:
+    source.rename(destination)
+
+
+def _read_record(site: Path) -> Installed | None:
+    try:
+        data = json.loads((site / RECORD).read_text(encoding="utf-8"))
+        record = Installed(
+            str(data["platform"]),
+            str(data["python"]),
+            {str(k): str(v) for k, v in data["packages"].items()},
+            tuple(str(w) for w in data.get("wheels", [])),
+        )
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        return None
+    if not all((site / dist_info(wheel)).is_dir() for wheel in record.wheels):
+        return None
+    return record
+
+
+def _matches(current: Installed | None, wanted: Plan) -> bool:
+    return (
+        current is not None
+        and current.platform == wanted.platform
+        and current.python == wanted.python
+        and current.packages == wanted.packages
+    )
+
+
 def _member_parts(name: str, wheel_name: str) -> tuple[str, ...] | None:
     """Where a wheel member lands, or None to skip it (PEP 427's .data folders aside from
     purelib and platlib hold scripts and headers the plugin has no use for)."""
     path = PurePosixPath(name)
     parts = path.parts
-    if (
-        not parts
-        or path.is_absolute()
-        or ".." in parts
-        or any(":" in part or "\\" in part for part in parts)
-    ):
-        if parts and (
-            path.is_absolute()
-            or ".." in parts
-            or any(":" in part or "\\" in part for part in parts)
-        ):
-            raise InstallError(f"{wheel_name} has an unsafe path: {name}")
+    if not parts:
         return None
+    if path.is_absolute() or ".." in parts or any(":" in part or "\\" in part for part in parts):
+        raise InstallError(f"{wheel_name} has an unsafe path: {name}")
     if parts[0].endswith(".data"):
         if len(parts) > 2 and parts[1] in ("purelib", "platlib"):
             return parts[2:]
@@ -333,6 +415,7 @@ __all__ = [
     "Installed",
     "Plan",
     "activate",
+    "dist_info",
     "download",
     "fetch_from_folder",
     "install",

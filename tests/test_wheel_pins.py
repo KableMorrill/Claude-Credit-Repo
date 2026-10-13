@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -57,3 +58,12 @@ def test_the_windows_download_is_the_large_one():
     assert 80_000_000 < plan.total_size < 100_000_000
     plan = installer.plan("linux-x86_64", "3.10")
     assert 15_000_000 < plan.total_size < 25_000_000
+
+
+def test_dev_dependencies_pin_the_versions_the_plugin_fetches():
+    """Tests must run against the same c2pa-python and cryptography the plugin will install."""
+    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    for package in ("c2pa-python", "cryptography"):
+        match = re.search(rf'^\s*"{re.escape(package)}==([^"]+)"', pyproject, re.MULTILINE)
+        assert match is not None, f"{package} is not pinned in pyproject.toml's dev group"
+        assert match.group(1) == PINS[package]

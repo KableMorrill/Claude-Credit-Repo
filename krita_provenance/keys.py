@@ -15,9 +15,11 @@ mirrored from ``scripts/make_test_certs.py``:
 Validity is long because there is no timestamp authority yet (K3, Q4): without one a signature
 is only as valid as its certificate is at the moment someone checks it. K4 adds rotation.
 
-Storage follows Q5's proposed default: four PEM files in a folder the Krita glue chooses, the
-private keys created with mode 0600. Windows ignores the mode; the folder is per-user there.
-The root key stays so K4 can issue a new signer certificate under the same CA.
+Storage is the data-folder option of Q5, which the spec's threat model backs with file
+permissions; the keychain option is open. Four PEM files in a folder the Krita glue chooses,
+the private keys unencrypted (K4 adds a passphrase) and created with mode 0600, which Windows
+ignores; the folder is per-user there. The root key stays, with the same protection, so K4 can
+issue a new signer certificate under the same CA; whether to keep it at all is a K4 question.
 
 Names: the certificate's subject becomes ``signature_info.common_name`` in every manifest, so
 it carries no user or machine name (D1). The default is neutral, and K2 lets users bring their
@@ -45,9 +47,7 @@ ROOT_COMMON_NAME = "krita-provenance local root CA"
 ORGANIZATION = "krita-provenance"
 ROOT_VALIDITY = timedelta(days=20 * 365)
 SIGNER_VALIDITY = timedelta(days=10 * 365)
-BACKDATE = timedelta(
-    minutes=5
-)  # clocks differ; a certificate valid "from now" can read as not yet valid
+BACKDATE = timedelta(days=1)  # a validator with a slower clock must not read "not yet valid"
 ALGORITHM = "es256"
 
 ROOT_CERTIFICATE = "root-ca.pem"
@@ -133,7 +133,7 @@ class KeyFiles:
     def signer_config(self) -> SignerConfig:
         """What sdk.sign_file needs: the chain, signer first, and the signer's key."""
         if not self.exists():
-            raise KeysError(f"No signing keys in {self.folder}")
+            raise KeysError("No signing keys have been made yet")  # no path: a path names the user
         chain = self.certificate.read_bytes() + self.root_certificate.read_bytes()
         return SignerConfig(chain, self.key.read_bytes(), ALGORITHM)
 
@@ -157,8 +157,8 @@ def ensure(folder: Path, common_name: str = DEFAULT_COMMON_NAME) -> KeyFiles:
     present = [path.name for path in files.paths if path.exists()]
     if present:
         raise KeysError(
-            f"{folder} holds {', '.join(present)} but not all of {', '.join(FILES)}; move them"
-            " aside before new keys can be made"
+            f"The keys folder holds {', '.join(present)} but not all of {', '.join(FILES)}; move"
+            " them aside before new keys can be made"
         )
     generated = generate(common_name)
     folder.mkdir(parents=True, exist_ok=True)
@@ -258,10 +258,10 @@ def generate(common_name: str = DEFAULT_COMMON_NAME, now: datetime | None = None
 
 def describe(certificate_pem: bytes) -> CertificateInfo:
     """The facts about a certificate that the user sees (K1: "shows its fingerprint")."""
+    certificate = _load_certificate(certificate_pem)  # checks that cryptography is there first
     from cryptography.hazmat.primitives import hashes
     from cryptography.x509.oid import NameOID
 
-    certificate = _load_certificate(certificate_pem)
     return CertificateInfo(
         common_name=_attribute(certificate.subject, NameOID.COMMON_NAME),
         issuer=_attribute(certificate.issuer, NameOID.COMMON_NAME),
@@ -311,9 +311,8 @@ def _attribute(name: x509.Name, oid: x509.ObjectIdentifier) -> str:
 
 
 def _write_private(path: Path, data: bytes) -> None:
-    """Create a file only this user can read. Fails rather than overwrite."""
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        os.write(descriptor, data)
-    finally:
-        os.close(descriptor)
+    """Create a file only this user can read, as bytes. Fails rather than overwrite."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)  # no CRLF on Windows
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(path, flags, 0o600), "wb") as output:
+        output.write(data)
