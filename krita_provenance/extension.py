@@ -3,6 +3,12 @@
 Only Krita-facing modules may import `krita`; everything else must run without it
 (tests/test_architecture.py). Keep this module thin: it runs only inside Krita, where unit tests
 can't reach it.
+
+libkis wrappers (Window, Document, Node) are short-lived: the Window handed to createActions is
+deleted once setup is over, and a handler that kept it fails with "wrapped C/C++ object has been
+deleted" (seen in Krita 5.3 on Windows, 13 Oct 2026). Handlers therefore take no arguments and
+look up the active window and document when they fire; tests/test_architecture.py checks that
+no handler closes over the createActions parameter.
 """
 
 from krita import Document, Extension, Krita, Window
@@ -24,28 +30,30 @@ class ProvenanceExtension(Extension):
         action = window.createAction(
             ENVIRONMENT_ACTION_ID, "Provenance: Check Environment", "tools/scripts"
         )
-        action.triggered.connect(lambda: _show_environment(window))
+        action.triggered.connect(_show_environment)
         status = window.createAction(
             LOG_STATUS_ACTION_ID, "Provenance: Log Status", "tools/scripts"
         )
-        status.triggered.connect(lambda: _show_log_status(window))
+        status.triggered.connect(_show_log_status)
 
 
-def _show_environment(window: Window) -> None:
+def _parent() -> QtWidgets.QWidget | None:
+    """The active window's QWidget for dialogs, looked up now; None when there is none."""
+    window = Krita.instance().activeWindow()
+    return window.qwindow() if window is not None else None
+
+
+def _show_environment() -> None:
     environment = collect_environment(krita_version=Krita.instance().version())
-    QtWidgets.QMessageBox.information(
-        window.qwindow(), "Provenance environment", environment.to_text()
-    )
+    QtWidgets.QMessageBox.information(_parent(), "Provenance environment", environment.to_text())
 
 
-def _show_log_status(window: Window) -> None:
+def _show_log_status() -> None:
     """Spike S4: create the log in the active document if absent, then show it. Save and reopen
     the document and run this again: the document id must be the same."""
     document = Krita.instance().activeDocument()
     if document is None:
-        QtWidgets.QMessageBox.information(
-            window.qwindow(), "Provenance log", "Open a document first."
-        )
+        QtWidgets.QMessageBox.information(_parent(), "Provenance log", "Open a document first.")
         return
     try:
         entry = read_log(document)
@@ -54,12 +62,12 @@ def _show_log_status(window: Window) -> None:
             entry = storage.start(document.fileName() or None)
             write_log(document, entry)
     except storage.StorageError as error:
-        QtWidgets.QMessageBox.warning(window.qwindow(), "Provenance log", str(error))
+        QtWidgets.QMessageBox.warning(_parent(), "Provenance log", str(error))
         return
     text = storage.summary(entry)
     if created:
         text += "\n\nThe log was just created and written to the document; save it to keep it."
-    QtWidgets.QMessageBox.information(window.qwindow(), "Provenance log", text)
+    QtWidgets.QMessageBox.information(_parent(), "Provenance log", text)
 
 
 def read_log(document: Document):

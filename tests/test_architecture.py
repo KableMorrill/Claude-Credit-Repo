@@ -78,3 +78,33 @@ def test_everything_but_krita_glue_imports_without_krita_or_qt():
 def test_the_rules_see_imports():
     source = "import krita\nfrom PyQt5.QtCore import QObject\nfrom . import qt\n"
     assert imported_top_level_modules(source) == {"krita", "PyQt5"}
+
+
+def test_action_handlers_do_not_keep_the_create_actions_window():
+    """libkis wrappers die after the call that received them: a handler that closed over the
+    Window passed to createActions failed in Krita 5.3 with "wrapped C/C++ object ... has been
+    deleted". Handlers must look the window up when they fire."""
+    source = (PACKAGE / "extension.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    offenders = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "createActions":
+            parameter = node.args.args[1].arg  # self, window
+            for inner in ast.walk(node):
+                if isinstance(inner, (ast.Lambda, ast.FunctionDef)) and inner is not node:
+                    names = {n.id for n in ast.walk(inner) if isinstance(n, ast.Name)}
+                    if parameter in names:
+                        offenders.append(f"line {inner.lineno}")
+                if isinstance(inner, ast.Call) and _is_connect(inner):
+                    for argument in inner.args:
+                        if isinstance(argument, ast.Lambda):
+                            lambda_names = {
+                                n.id for n in ast.walk(argument) if isinstance(n, ast.Name)
+                            }
+                            if parameter in lambda_names:
+                                offenders.append(f"line {argument.lineno}")
+    assert offenders == [], f"handlers capture the createActions window: {offenders}"
+
+
+def _is_connect(call: ast.Call) -> bool:
+    return isinstance(call.func, ast.Attribute) and call.func.attr == "connect"

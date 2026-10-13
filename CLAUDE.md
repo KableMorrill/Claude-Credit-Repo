@@ -73,7 +73,9 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
   `existing_document` with the file as parent), summarises the log and holds the debounce
   policy. `extension.py` adds Tools ▸ Scripts ▸ Provenance: Log Status, which creates the log
   if absent and shows the summary; docs/smoke-checklist.md rows 4 to 8 are the S4 check.
-  Type-checked against the stubs only; unverified in Krita.
+  First Krita run (Windows 11, Krita 5.3): both actions failed because their handlers kept
+  the createActions Window; fixed by looking the window up when the action fires. Rows 1 to 8
+  await a rerun.
 - **Not done:** the rest of step 7: debounced writes on capture, the Krita AI Diffusion adapter
   (C1–C3), first-run install and key creation in Krita, the export action with the dialog of
   decision 3, the docker (V1) and the release zip (I1). Spikes S1, S3 and S5 haven't run; S4
@@ -146,6 +148,11 @@ Enforced by `tests/test_architecture.py`:
   and the K1 gaps that `tests/test_wheel_pins.py` and `tests/test_installer.py` spell out, and
   review the diff: those digests are what every download is checked against.
 - `ai_diffusion` is imported only in `krita_provenance/adapters/ai_diffusion.py`.
+- libkis wrappers (Window, Document, Node) are never kept beyond the call that received them.
+  Action handlers take no arguments and look up `Krita.instance().activeWindow()` and
+  `activeDocument()` when they fire; the Window passed to `createActions` is deleted after
+  setup, and a handler that captured it failed in Krita 5.3 with "wrapped C/C++ object of type
+  Window has been deleted" (13 Oct 2026). `tests/test_architecture.py` checks for the capture.
 - `version` in pyproject.toml equals `krita_provenance.__version__` (`tests/test_version.py`).
 
 From the spec. Add tests for each as you implement it:
@@ -173,7 +180,9 @@ From the spec. Add tests for each as you implement it:
 Runtime:
 
 - The plugin runs on Krita's embedded Python with only the standard library and Krita's PyQt.
-  Assume Python 3.10 until S1 says otherwise; pyright targets 3.10 and CI tests on it.
+  S1 (13 Oct 2026): Krita 5.3 on Windows 11 runs Python 3.11 or newer (its tracebacks carry
+  3.11's `~~~^^^` markers). Keep targeting 3.10: pyright and CI stay on it, so the plugin also
+  runs on older Krita builds and the pins cover 3.10 to 3.14.
 - The third-party packages the plugin may use are c2pa-python 0.38.x, through `sdk.py`, and
   `cryptography` with its dependency `cffi` for K1 (decision 1 above), all fetched at first run.
   Dev and test tools can be anything.
