@@ -1,0 +1,12 @@
+[req]
+distinguished_name = dn
+prompt = no
+[dn]
+CN = krita-provenance test signer
+O = krita-provenance tests
+[v3_signer]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature
+extendedKeyUsage = emailProtection
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid

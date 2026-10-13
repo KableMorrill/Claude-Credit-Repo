@@ -10,6 +10,7 @@ requires-python = ">=3.10"  # Krita's embedded Python; c2pa-python also needs 3.
 # standard library and Qt; c2pa-python is fetched on first run (spec I2).
 [dependency-groups]
 dev = [
+    "c2pa-python==0.38.0",  # for the signing tests; the plugin fetches its own copy at first run (I2)
     "pyqt5-stubs>=5.15.6",  # Qt types for Krita 5.3; scripts/typeshed/krita.pyi imports PyQt5
     "pyright[nodejs]>=1.1.414",
     "pytest>=9.1",
@@ -24,7 +25,7 @@ package = false
 target-version = "py310"
 line-length = 100
 preview = true
-src = [".", "scripts"]
+src = [".", "scripts", "tests"]
 extend-exclude = ["scripts/typeshed", "*.md"]  # preview mode would reformat code in Markdown
 
 [tool.ruff.lint]
@@ -41,7 +42,7 @@ typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "scripts"]
+pythonpath = [".", "scripts", "tests"]
 addopts = ["--import-mode=importlib", "--strict-config", "--strict-markers", "-ra"]
 xfail_strict = true
 filterwarnings = ["error"]

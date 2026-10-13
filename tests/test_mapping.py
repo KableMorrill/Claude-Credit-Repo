@@ -1,8 +1,7 @@
 """Golden tests for the log-to-manifest mapping (spec: C2PA mapping, Testing and validation).
 
-Each directory under tests/fixtures/goldens holds a log, what the exporter knew (export.json)
-and the expected manifest. Run with UPDATE_GOLDENS=1 to rewrite the expected files after a
-deliberate mapping change, then review the diff.
+The cases live under tests/fixtures/goldens; see tests/goldens.py for their layout and for
+UPDATE_GOLDENS=1, which rewrites the expected manifests after a deliberate change.
 """
 
 from __future__ import annotations
@@ -10,11 +9,10 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
 
 import pytest
 
+from goldens import CASES, GOLDENS, load_case, read_json
 from krita_provenance import __version__, log, mapping
 from krita_provenance.log import (
     CaptureGap,
@@ -29,35 +27,12 @@ from krita_provenance.log import (
     Source,
     UnknownEvent,
 )
-from krita_provenance.mapping import Export, LayerState, MappingError
+from krita_provenance.mapping import Export, MappingError
 from krita_provenance.scrub import Identity
 
-GOLDENS = Path(__file__).parent / "fixtures" / "goldens"
-CASES = sorted(path.name for path in GOLDENS.iterdir() if (path / "log.json").is_file())
 NO_ONE = Identity()
 T0 = datetime(2026, 11, 2, 18, 4, 11, tzinfo=timezone.utc)
 T1 = datetime(2026, 11, 2, 19, 0, 0, tzinfo=timezone.utc)
-
-
-def read_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_case(name: str) -> tuple[ProvenanceLog, Export, Identity]:
-    folder = GOLDENS / name
-    entry = ProvenanceLog.from_json((folder / "log.json").read_text(encoding="utf-8"))
-    data = read_json(folder / "export.json")
-    layers = data["layers"]
-    export = Export(
-        title=data["title"],
-        format=data["format"],
-        at=log.parse_time(data["at"]),
-        krita_version=data["krita_version"],
-        layers=None if layers is None else {k: LayerState(**v) for k, v in layers.items()},
-    )
-    who = data["identity"]
-    identity = Identity(tuple(who["user_names"]), who["home"], tuple(who["host_names"]))
-    return entry, export, identity
 
 
 @pytest.mark.parametrize("name", CASES)
