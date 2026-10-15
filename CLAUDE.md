@@ -13,9 +13,10 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
 
 ## Handover (13 Oct 2026, from the Fable session, updated by the Opus session)
 
-Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, CI green
-through `0d5c44f` (pushed 14 Oct 2026 at the user's request). From `c86d349` on, work happens
-in the user's Windows 11 checkout (Python 3.12 venv, no c2patool), where all four checks pass.
+Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, pushed at
+the user's request on 14 and 15 Oct 2026 (CI green through `0d5c44f`; check the run for later
+pushes). From `c86d349` on, work happens in the user's Windows 11 checkout (Python 3.12 venv,
+no c2patool), where all four checks pass.
 
 Results in (13 Oct 2026, Opus session): smoke rows 1 to 8 pass on Windows 11 (S1's Python
 check and S4); the Adobe check (S2) is pending because Adobe's tools failed for every upload.
@@ -31,7 +32,7 @@ Then the rest of step 7, in this order, each piece committed with the four check
    document. The user agreed to dropping the debounce on 14 Oct 2026. Row 11 found that
    writing an annotation marks the document modified; `extension.ensure_log` now clears the
    mark after starting a log in a document that had no unsaved changes.
-2. First run. **Built 14 Oct 2026, waiting on smoke rows 12 to 16.** Tools ▸ Scripts ▸
+2. First run. **Done 15 Oct 2026; smoke rows 12 to 16 pass, and with them S1 on Windows.** Tools ▸ Scripts ▸
    Provenance: Set Up Signing asks before downloading (`firstrun.consent_text`), then runs
    `firstrun.run` on a Python thread behind a progress dialog: install, `installer.activate`,
    `keys.ensure(folder / "keys")`, and a self-test that signs a blank PNG and reads it back.
@@ -140,7 +141,7 @@ test modules.
   one isn't an edit). Events appended later keep the flag Krita sets. The rerun of row 11
   passes for this plugin: Krita still asks while Krita AI Diffusion is enabled, because it
   writes its own document id into a document it hasn't seen, and doesn't ask with it disabled.
-- **Step 7, piece 2 (14 Oct 2026), unverified in Krita:** `firstrun.py` (Krita-free, tested
+- **Step 7, piece 2 (14–15 Oct 2026), verified in Krita:** `firstrun.py` (Krita-free, tested
   with faked downloads and the real c2pa-python and cryptography) holds the data folder rule
   (refuses a folder inside the plugin), the consent text, overall progress and cancellation,
   install → activate → keys → self-test, and the report. The report flags any of c2pa,
@@ -148,16 +149,20 @@ test modules.
   isn't the code whose SHA-256 was checked. `extension.py` adds Provenance: Set Up Signing; a
   QObject made in the GUI thread carries the worker's progress and result back to it. Check
   Environment reports the plugin's own install even before it joins `sys.path`. Smoke rows 12
-  to 16 check it; row 13 passing completes S1 on Windows.
+  to 16 pass (15 Oct 2026): inside Krita 5.3.4.1 on Windows, the real download verified and
+  installed, c2pa-python 0.38.0 loaded in Krita's Python 3.13.5 from the data folder, the keys
+  were made and kept across a restart, and the self-test signed and read back. Cancelling
+  mid-download installs nothing; it leaves the data folder and an empty `downloads` folder,
+  which installer.py keeps on purpose (removing it could break a second install running at the
+  same time).
 - **Decisions of 14 Oct 2026**, from the user: (1) P1's debounce is dropped; every change is
   written at once. (2) Plain-language statements give dates in UTC and say so: "since
   15 October 2026 (UTC)" (`mapping.ai_use_statement`). (3) Pushing to the branch so CI runs is
   approved for these commits; ask again before pushing later work.
-- **Not done:** the rest of step 7: the Krita AI Diffusion adapter
-  (C1–C3), first-run install and key creation in Krita, the export action with the dialog of
-  decision 3, the docker (V1) and the release zip (I1). S1 is half done: the Python version is
-  checked on Windows, but loading c2pa-python inside Krita and signing from it wait on first
-  run (piece 2 of the handover). S3 and S5 haven't run. **S2's Adobe check passes for a
+- **Not done:** the rest of step 7: the Krita AI Diffusion adapter (C1–C3), the export action
+  with the dialog of decision 3, the docker (V1) and the release zip (I1). **S1 passes on
+  Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs inside Krita; macOS
+  and Linux are unchecked. S3 and S5 haven't run. **S2's Adobe check passes for a
   minimal manifest** (14 Oct 2026). Adobe's Verify (verify.contentauthenticity.org), which
   answered "Something went wrong" to every upload on 13 Oct, now reads a PNG carrying one
   `c2pa.created` action, signed with our test certificate (the profile `keys.py` makes). It
@@ -165,15 +170,16 @@ test modules.
   unrecognized source", as S2 expects. It reads the same with an IPTC source type, with C2PA's
   public test certificate, as JPEG and as claim v1 (plus "This file uses a legacy version of
   the C2PA Technical Specification"). With a DigiCert timestamp it also shows the signing
-  date; without one it shows no date. c2pa-python's sample `C.jpg` reads too. **Still open:**
-  the full manifests. Inspect popped "Something went wrong" for the `nothing_observed` and
-  `new_document` goldens on 13 and 14 Oct, at 16 px and at 512 px, while unsigned images drew
-  only "We couldn't verify how this was made". Nobody has uploaded a full manifest to Verify
-  since it recovered, and the M1 gate needs Verify to show the actions. The goldens' regions
-  (up to 2048 px) lie outside those images, a suspect. Round-3 files are with the user: each
-  action type added alone to the minimal manifest, a region inside and one outside the image,
-  and the full `new_document` manifest on a 2048 px image that contains its regions. Until
-  then c2patool and c2pa-python read-back are the verification of record for full manifests.
+  date; without one it shows no date. c2pa-python's sample `C.jpg` reads too. **Full
+  manifests fail in Verify, and the cause is found** (15 Oct 2026). Every file whose actions
+  carry `changes` with a rectangle region draws "Something went wrong" in Verify: all of
+  `samples/`, and regions inside or outside the image alike; region-free actions read. Verify
+  reads with c2pa-rs 0.85.2, which can't decode a rectangle's optional `width` and `height`
+  (facts, below), even in a file it signed itself. The same five goldens re-signed with each
+  rectangle written as a four-corner polygon read Valid in c2pa-rs 0.85.1. The user hasn't
+  yet uploaded the polygon files to Verify, and polygons versus rectangles is their call
+  (open questions). Until Verify reads the full manifests, c2patool and c2pa-python read-back
+  are the verification of record for them.
   The go/no-go note is due 25 Oct 2026.
 - **Next:** the rest of step 7 in the handover's order, stopping after each piece that touches
   Krita for the user to test it.
@@ -384,6 +390,22 @@ Rely on these; check anything else against source.
   `c2pa.ingredient.v3` assertion holds only the title, format, relationship and instance id: no
   hash of the bytes and no thumbnail. The parent names the file; it does not bind to its bytes.
 
+**Older c2pa-rs can't read rectangle regions** (checked 15 Oct 2026 by reading signed files
+with older c2pa-python releases in a scratch venv):
+
+- c2pa-rs 0.85.1, 0.88.0, 0.89.0, 0.90.0, 0.90.8 and 0.90.16 fail on any `c2pa.actions.v2`
+  whose `changes` hold a rectangle: "could not decode assertion c2pa.actions.v2 … Syntax error:
+  Invalid simple type in option". 0.85.1 fails even on a rectangle it signed itself. 0.90.19
+  and 0.91.0 read them. The changelog for 0.90.17 to 0.90.19 doesn't name the fix.
+- The failing fields are the rectangle's `width` and `height`, `Option<f64>` in
+  `region_of_interest.rs` (unchanged between 0.85.2 and 0.91.0), which every version encodes
+  as CBOR doubles. A polygon (`origin` plus `vertices`, all plain `f64`) reads in 0.85.1, and
+  so do floats in action `parameters`.
+- Adobe's Verify (contentauth/verify-site, SvelteKit) depends on `@contentauth/c2pa-web`
+  `^0.11.0`, which bundles c2pa-rs `=0.85.2` (c2pa-js Cargo.toml at that tag). c2pa-web 0.15.0
+  bundles 0.90.22 and 0.15.3 (30 Sept 2026) bundles 0.91.0. Verify turns any read error into
+  "Something went wrong" and logs it to the browser console from `createC2paReader.read()`.
+
 **Wheels on PyPI, checked 13 Oct 2026** (`scripts/update_wheel_pins.py` reads the same data):
 
 - c2pa-python 0.38.0: `py3-none` wheels for macOS 10.9 x86_64 and universal2, macOS 11
@@ -445,6 +467,12 @@ Raise these with the user rather than settling them silently.
   like is the glue's; `installer.install` reports progress per wheel.
 - P1's debounce is dropped (user, 14 Oct 2026): Krita has no before-save signal and
   `imageSaved` fires after the file is written, so every change is written at once.
+- **Rectangles or polygons for regions?** The spec's mapping table says rectangles, and
+  `mapping.rectangle` writes them, but Adobe's Verify can't read a rectangle until it moves to
+  c2pa-web 0.15.0 or later (facts, above). Writing each rectangle as its four corners is the
+  same area, valid C2PA, and readable by every c2pa-rs version tried; the five goldens read
+  that way in c2pa-rs 0.85.1. Changing it is one function plus `UPDATE_GOLDENS=1` and
+  `scripts/make_samples.py`. Ask the user; reporting the Verify dependency upstream is theirs.
 - Without a timestamp, Adobe's Verify shows no date for a file's credentials; with one it shows
   the signing date (14 Oct 2026). Timestamps stay off for v0.1 (decision 6 of the second set);
   this is input for K3 and Q4.
