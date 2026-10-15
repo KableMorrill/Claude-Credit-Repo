@@ -16,7 +16,7 @@ from krita import Document, Extension, Krita, Window
 
 from . import storage
 from .environment import collect_environment
-from .log import ANNOTATION
+from .log import ANNOTATION, ProvenanceLog
 from .qt import QtCore, QtWidgets
 
 ENVIRONMENT_ACTION_ID = "krita_provenance_environment"
@@ -53,8 +53,7 @@ def _start_log(document: Document) -> None:
     if document.rootNode() is None:
         return  # no image yet (Krita.createDocument registers first); setAnnotation needs one
     try:
-        if read_log(document) is None:
-            write_log(document, storage.start(document.fileName() or None))
+        ensure_log(document)
     except storage.StorageError as error:
         message = (
             f"{error}\n\nNothing will be recorded in this document, and its log is kept as is."
@@ -78,11 +77,7 @@ def _show_log_status() -> None:
         QtWidgets.QMessageBox.information(_parent(), "Provenance log", "Open a document first.")
         return
     try:
-        entry = read_log(document)
-        created = entry is None
-        if entry is None:
-            entry = storage.start(document.fileName() or None)
-            write_log(document, entry)
+        entry, created = ensure_log(document)
     except storage.StorageError as error:
         QtWidgets.QMessageBox.warning(_parent(), "Provenance log", str(error))
         return
@@ -90,6 +85,25 @@ def _show_log_status() -> None:
     if created:
         text += "\n\nThe log was just created and written to the document; save it to keep it."
     QtWidgets.QMessageBox.information(_parent(), "Provenance log", text)
+
+
+def ensure_log(document: Document) -> tuple[ProvenanceLog, bool]:
+    """The document's log, and True if it had none and one was started and written just now.
+
+    Starting a log is not an edit, but Krita marks a document modified whenever an annotation is
+    set (KisImage::addAnnotation). A document that had no unsaved changes is marked unmodified
+    again, so Krita doesn't ask to save a file the user only opened; any later change marks it
+    modified, and that save includes the log. Events appended later keep Krita's flag.
+    """
+    entry = read_log(document)
+    if entry is not None:
+        return entry, False
+    entry = storage.start(document.fileName() or None)
+    was_modified = document.modified()
+    write_log(document, entry)
+    if not was_modified:
+        document.setModified(False)  # pyright: ignore[reportAttributeAccessIssue] (not in the stubs)
+    return entry, True
 
 
 def read_log(document: Document):
@@ -100,7 +114,8 @@ def read_log(document: Document):
 
 
 def write_log(document: Document, entry) -> None:
-    """The document must have an image: Krita 5.3's setAnnotation uses it without a check."""
+    """The document must have an image: Krita 5.3's setAnnotation uses it without a check. The
+    write marks the document modified."""
     document.setAnnotation(ANNOTATION, storage.DESCRIPTION, storage.serialize(entry))
 
 

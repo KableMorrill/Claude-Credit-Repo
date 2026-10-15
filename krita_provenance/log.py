@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 SCHEMA = "krita-provenance/1"
-ANNOTATION = "krita-provenance.json"  # Krita AI Diffusion uses ui.json and result{n}.webp
+ANNOTATION = "krita-provenance.json"  # no clash: Krita AI Diffusion's start with ai_diffusion/
 
 # log_started.reason
 NEW_DOCUMENT = "new_document"  # a blank canvas created in Krita while the plugin watched

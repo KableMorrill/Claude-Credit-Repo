@@ -23,12 +23,14 @@ The user tests each piece below that touches Krita before the next one starts.
 
 Then the rest of step 7, in this order, each piece committed with the four checks passing:
 
-1. Annotation writes. **Built 13 Oct 2026, waiting on smoke rows 9 to 11.** Planned as
-   debounced writes flushed on `Notifier.imageSaved`, but that signal fires after the file is
-   written, so a debounced event could miss a save. Built instead: every change is written at
-   once (`storage.append`; `Debounce` removed; storage.py's docstring has the reasoning), and
-   `Notifier.imageCreated` starts the log when Krita creates or opens a document. The user
-   hasn't yet agreed to dropping the debounce (open questions).
+1. Annotation writes. **Built; rows 9 and 10 pass, row 11 awaits a rerun after a fix.**
+   Planned as debounced writes flushed on `Notifier.imageSaved`, but that signal fires after
+   the file is written, so a debounced event could miss a save. Built instead: every change is
+   written at once (`storage.append`; `Debounce` removed; storage.py's docstring has the
+   reasoning), and `Notifier.imageCreated` starts the log when Krita creates or opens a
+   document. The user agreed to dropping the debounce on 14 Oct 2026. Row 11 found that
+   writing an annotation marks the document modified; `extension.ensure_log` now clears the
+   mark after starting a log in a document that had no unsaved changes.
 2. First run: data folder = a `krita-provenance` subfolder under Krita's app-data location
    (`QStandardPaths.AppDataLocation`), never the plugin folder. `installer.plan()` then
    `installer.install(folder, plan, progress=...)` behind a progress dialog, `installer.activate`
@@ -122,13 +124,15 @@ test modules.
   Diffusion 1.53.0): smoke rows 1 to 8 pass. The log keeps its id and start time through save
   and reopen, Krita AI Diffusion's history survives beside it, and opened PNGs and older .kra
   files start with the right reason and parent.
-- **Step 7, piece 1, built (13 Oct 2026), unverified in Krita:** `extension.py` connects
-  `Notifier.imageCreated` and starts the log when Krita creates or opens a document (skipping
-  a document with no image yet), so `log_started.at` is when the plugin began observing it,
-  not when Log Status first ran. An unreadable log is left alone, with a warning shown after
-  the open. `storage.append` loads or starts the log, appends one event and returns the bytes
-  to write at once; nothing calls it yet (the adapter and the export will). Smoke rows 9 to 11
-  check it.
+- **Step 7, piece 1 (13–14 Oct 2026):** `extension.py` connects `Notifier.imageCreated` and
+  starts the log when Krita creates or opens a document (skipping a document with no image
+  yet), so `log_started.at` is when the plugin began observing it, not when Log Status first
+  ran. An unreadable log is left alone, with a warning shown after the open. `storage.append`
+  loads or starts the log, appends one event and returns the bytes to write at once; nothing
+  calls it yet (the adapter and the export will). Smoke rows 9 and 10 pass. Row 11 failed:
+  Krita asked to save an older .kra that was only opened, because setting an annotation marks
+  the document modified. `ensure_log` now restores the flag after starting a log (starting
+  one isn't an edit). Events appended later keep the flag Krita sets. Row 11 awaits a rerun.
 - **Not done:** the rest of step 7: the Krita AI Diffusion adapter
   (C1–C3), first-run install and key creation in Krita, the export action with the dialog of
   decision 3, the docker (V1) and the release zip (I1). S1 is half done: the Python version is
@@ -138,10 +142,15 @@ test modules.
   2026 Adobe's Verify (verify.contentauthenticity.org) answered "Something went wrong" for
   every upload, unrelated images included. Adobe Content Authenticity Inspect
   (contentauthenticity.adobe.com/inspect) said "We couldn't verify how this was made" for every
-  upload, and for our samples only, also popped "Something went wrong". That may mean Inspect
-  found our manifests and failed on them, but the samples also differ from the other image in
-  size (16x16 pixels), so it isn't known whether the fault is the site's or the files'. Until
-  an Adobe tool reads them, c2patool and c2pa-python read-back are the verification of record.
+  upload, and for our samples only, also popped "Something went wrong". On 14 Oct a bisection
+  ruled out size: unsigned 16 px and 512 px PNGs drew only the generic message, and the same
+  512 px PNG signed with the `nothing_observed` or `new_document` golden popped "Something went
+  wrong". So Inspect fails on our signed files, or on every test-signed file. Our files differ
+  from c2pa-python's sample `C.jpg` (claim v1, PS256, timestamped 2023) in claim version (v2)
+  and in having no timestamp. A second round is with the user: a minimal manifest (one
+  `c2pa.created`), then that manifest with an IPTC source type, with C2PA's public test
+  certificate, with a DigiCert timestamp, as claim v1, as JPEG, and `C.jpg` itself. Until an
+  Adobe tool reads them, c2patool and c2pa-python read-back are the verification of record.
   The go/no-go note is due 25 Oct 2026.
 - **Next:** the rest of step 7 in the handover's order, stopping after each piece that touches
   Krita for the user to test it.
@@ -300,6 +309,13 @@ Rely on these; check anything else against source.
 - It keeps its state in a `ui.json` annotation, rewritten about a second after the last change
   (including after `result_used`), and result images in `result{slot}.webp` annotations
   ([persistence.py](https://github.com/Acly/krita-ai-diffusion/blob/0217cd2197fcadbd70d7e63af25e29cc21cb7c8b/ai_diffusion/persistence.py)).
+  The annotation types carry an `ai_diffusion/` prefix (`ai_diffusion/ui.json`), added by
+  `KritaDocument.annotate`
+  ([document.py L258–266](https://github.com/Acly/krita-ai-diffusion/blob/0217cd2197fcadbd70d7e63af25e29cc21cb7c8b/ai_diffusion/document.py#L258-L266)).
+  The first time it wraps a document with no `ai_diffusion/document_id` annotation, it writes
+  one ([L120–130](https://github.com/Acly/krita-ai-diffusion/blob/0217cd2197fcadbd70d7e63af25e29cc21cb7c8b/ai_diffusion/document.py#L120-L130)),
+  which marks the document modified, as any annotation write does (Krita 5.3 source, below).
+  It gives a copy of an open document (same id) a new id.
 - Its LICENSE is the stock GPLv3 text with no "or later" grant, so GPL-3.0-or-later here is
   compatible (Q6).
 
@@ -366,9 +382,16 @@ methods, so `.connect` on them needs a `pyright: ignore`.
 
 **Krita 5.3 source** (commit `bd6e8d0`, the build the user runs, read 13 Oct 2026):
 
-- `Document::setAnnotation` replaces the annotation in the image and doesn't mark the document
-  modified. It uses `d->document->image()` without a null check, so it must never be called on
-  a document with no image; `rootNode()` and `width()` do check, and return None or 0.
+- `Document::setAnnotation` uses `d->document->image()` without a null check, so it must never
+  be called on a document with no image; `rootNode()` and `width()` do check, and return None
+  or 0. It calls `KisImage::addAnnotation`, which replaces the annotation and calls
+  `setModifiedWithoutUndo()`, and so does `removeAnnotation`. That reaches
+  `KisDocument::setModified(true)` synchronously: the image and its signal router live in the
+  GUI thread (`moveToThread(qApp->thread())` in KisImage's constructor). So every annotation
+  write marks the document modified; smoke row 11 showed it on 14 Oct 2026, after this file
+  had wrongly said otherwise. `Document.setModified(bool)` is in 5.3's bindings
+  (Document.sip) but not in our stubs. `KisDocument::setModified(false)` also clears
+  `imageModifiedWithoutUndo`, and autosave skips an unmodified document.
 - `Notifier::imageCreated` follows `KisPart::sigDocumentAdded`. It wraps the KisDocument in a
   new `Document`, emits, and deletes the wrapper as soon as the handlers return. For a local
   file, `KisMainWindow::openDocumentInternal` adds the document after `openPath` (or
@@ -391,9 +414,12 @@ Raise these with the user rather than settling them silently.
   x64) is fully covered.
 - Q5, K4 and the data folder are decided (second set above). What the first-run dialog looks
   like is the glue's; `installer.install` reports progress per wheel.
-- P1 says "debounced and before save", but Krita has no before-save signal and `imageSaved`
-  fires after the file is written. Piece 1 writes every change at once instead, so any save
-  includes it. Ask the user to confirm dropping the debounce; it is one place to change back.
+- P1's debounce is dropped (user, 14 Oct 2026): Krita has no before-save signal and
+  `imageSaved` fires after the file is written, so every change is written at once.
+- An `exported` event (piece 4) is appended to a document that may have no unsaved changes, and
+  the write marks it modified, so Krita will ask to save on close. Keeping that prompt lets the
+  user keep the event; clearing the mark would lose the event when they close without saving.
+  Decide with the user in piece 4.
 - A document with no file name may already have content when Krita creates it: Create from
   Clipboard, a template, Open existing Document as Untitled, an unnamed autosave recovered.
   Its log starts as `new_document`, which the mapping turns into `c2pa.created` from an empty

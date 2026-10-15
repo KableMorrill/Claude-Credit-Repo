@@ -45,10 +45,16 @@ writes every change to the document at once. Log times are in UTC.
 | --- | --- | --- |
 | 9 | Note the time, File ▸ New, paint a stroke, wait a minute, save as .kra, close, reopen, then run Log Status (not before) | "(new_document)", started when you created the document, not when you saved it; no "just created" note |
 | 10 | Open a PNG or JPEG, save it as .kra without running Log Status, close, reopen the .kra, run Log Status | "(opened_image)" and "Events: 1 ingredient_added", started when you opened the image |
-| 11 | Open an older .kra made before the plugin and close it straight away | Krita doesn't ask to save: starting the log doesn't mark the document changed. Reopen it and run Log Status: "(existing_document)", started at the reopening, since the first log was never saved |
+| 11 | Open an older .kra made before the plugin and close it straight away | Krita doesn't ask to save: starting the log isn't an edit, so the plugin clears the "modified" mark that writing it sets. Reopen it and run Log Status: "(existing_document)", started at the reopening, since the first log was never saved |
+
+Krita AI Diffusion writes its own document id into a document it hasn't seen before, and that
+also marks the document modified. If row 11 asks to save, run it again with Krita AI Diffusion
+disabled in the Python Plugin Manager (restart Krita, and re-enable it afterwards). If Krita
+then doesn't ask, the prompt comes from Krita AI Diffusion, not this plugin.
 
 ## Results
 
 | Date | Setup | Rows | Result |
 | --- | --- | --- | --- |
 | 13 Oct 2026 | Windows 11, Krita 5.3.4.1 (git bd6e8d0), Python 3.13.5, PyQt5, Krita AI Diffusion 1.53.0 (loaded), c2pa-python not installed (the installer isn't wired yet) | 1–8 | All pass, after the window fix in ee9c96c. S1's Python check passes on Windows (3.13.5) and S4 passes: the log kept its id and start time through save and reopen, and Krita AI Diffusion's history survived beside it |
+| 14 Oct 2026 (local; the log's UTC dates read 15 Oct) | Same | 9–11, on 7b379b0 | 9 and 10 pass: the logs started at 04:49:08Z and 04:53:19Z, when the documents were created and opened, not when they were saved. 11 fails: Krita asked to save old-test.kra on close, every time. Writing an annotation marks a document modified (KisImage::addAnnotation); the next commit clears the mark after starting a log. Rerun 11 |
