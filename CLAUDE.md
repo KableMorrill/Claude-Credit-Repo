@@ -14,8 +14,8 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
 ## Handover (13 Oct 2026, from the Fable session, updated by the Opus session)
 
 Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, CI green
-through `5952830`; every later commit passed all four checks locally, from `c86d349` on in the
-user's Windows 11 checkout (Python 3.12 venv; not pushed by Claude, so CI hasn't run them).
+through `0d5c44f` (pushed 14 Oct 2026 at the user's request). From `c86d349` on, work happens
+in the user's Windows 11 checkout (Python 3.12 venv, no c2patool), where all four checks pass.
 
 Results in (13 Oct 2026, Opus session): smoke rows 1 to 8 pass on Windows 11 (S1's Python
 check and S4); the Adobe check (S2) is pending because Adobe's tools failed for every upload.
