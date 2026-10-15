@@ -17,13 +17,15 @@ signed with the public test certificate in `tests/fixtures/certs`, so every vali
 report the signer as unrecognized or untrusted and nothing else. In c2pa-python and c2patool
 0.28.2 the state is `Valid` with `signingCredential.untrusted` as the only failure code.
 
-Adobe's tools haven't read them yet. On 13 Oct 2026 Verify answered "Something went wrong" for
-every upload, unrelated images included, and Content Authenticity Inspect
+Adobe's tools haven't read these files yet. On 13 Oct 2026 Verify answered "Something went
+wrong" for every upload, unrelated images included, and Content Authenticity Inspect
 (contentauthenticity.adobe.com/inspect) found no credentials in any upload and, for these
 samples only, also showed "Something went wrong". On 14 Oct the same happened with these
 manifests signed onto a 512 px image, while unsigned 16 px and 512 px images drew no error, so
-the image size isn't the cause. Until an Adobe tool reads them, c2patool and c2pa-python are
-the validators of record.
+the image size alone isn't the cause. The same day, Verify read a one-action manifest signed
+with the same certificate and showed the signer as unrecognized, as expected. The fictional
+regions here reach 2048 px, far outside the 16 px images, which is one suspect. Until an Adobe
+tool reads these files, c2patool and c2pa-python are the validators of record.
 
 Regenerate with `uv run python scripts/make_samples.py` whenever the goldens or the plugin
 version change; `tests/test_samples.py` fails until you do. The version in each manifest is the

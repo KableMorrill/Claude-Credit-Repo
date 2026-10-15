@@ -16,7 +16,8 @@ Checked against c2pa-rs 0.91.0, the library inside c2pa-python 0.38.0:
 Honesty rules (spec: Threat model):
 
 1. No "no AI used". ``ai_use_statement`` reads "No AI generation observed by this plugin since"
-   the log's start date.
+   the log's start date, marked (UTC) so it isn't read as a local date a day off (user, 14 Oct
+   2026).
 2. Every capture gap becomes a ``c2pa.unknown`` action that says what was not observed, with no
    ``changes``, which C2PA reads as "anything may have changed".
 3. A generation whose layer is hidden, gone or was never identified is described as possibly
@@ -43,7 +44,7 @@ import re
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from . import __version__, log
@@ -276,7 +277,7 @@ def ai_use_statement(entry: ProvenanceLog) -> str:
     """Honesty rule 1: absence is "not observed since", never "no AI used"."""
     generations = [e for e in entry.events if isinstance(e, GenerationApplied)]
     gaps = [e for e in entry.events if isinstance(e, CaptureGap)]
-    since = _date(entry.started.at)
+    since = f"{_date(entry.started.at)} (UTC)"
     if not generations:
         text = f"No AI generation observed by this plugin since {since}."
     else:
@@ -323,7 +324,8 @@ _DRIVE = re.compile(r"[A-Za-z]:")
 
 
 def _date(at: datetime) -> str:
-    """2 November 2026, independent of the locale and of Windows' strftime."""
+    """2 November 2026, the UTC date, independent of the locale and of Windows' strftime."""
+    at = at.astimezone(timezone.utc)
     return f"{at.day} {_MONTHS[at.month - 1]} {at.year}"
 
 

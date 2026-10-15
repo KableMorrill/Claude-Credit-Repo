@@ -23,7 +23,7 @@ The user tests each piece below that touches Krita before the next one starts.
 
 Then the rest of step 7, in this order, each piece committed with the four checks passing:
 
-1. Annotation writes. **Built; rows 9 and 10 pass, row 11 awaits a rerun after a fix.**
+1. Annotation writes. **Done 14 Oct 2026; smoke rows 9 to 11 pass.**
    Planned as debounced writes flushed on `Notifier.imageSaved`, but that signal fires after
    the file is written, so a debounced event could miss a save. Built instead: every change is
    written at once (`storage.append`; `Debounce` removed; storage.py's docstring has the
@@ -132,25 +132,34 @@ test modules.
   calls it yet (the adapter and the export will). Smoke rows 9 and 10 pass. Row 11 failed:
   Krita asked to save an older .kra that was only opened, because setting an annotation marks
   the document modified. `ensure_log` now restores the flag after starting a log (starting
-  one isn't an edit). Events appended later keep the flag Krita sets. Row 11 awaits a rerun.
+  one isn't an edit). Events appended later keep the flag Krita sets. The rerun of row 11
+  passes for this plugin: Krita still asks while Krita AI Diffusion is enabled, because it
+  writes its own document id into a document it hasn't seen, and doesn't ask with it disabled.
+- **Decisions of 14 Oct 2026**, from the user: (1) P1's debounce is dropped; every change is
+  written at once. (2) Plain-language statements give dates in UTC and say so: "since
+  15 October 2026 (UTC)" (`mapping.ai_use_statement`). (3) Pushing to the branch so CI runs is
+  approved for these commits; ask again before pushing later work.
 - **Not done:** the rest of step 7: the Krita AI Diffusion adapter
   (C1–C3), first-run install and key creation in Krita, the export action with the dialog of
   decision 3, the docker (V1) and the release zip (I1). S1 is half done: the Python version is
   checked on Windows, but loading c2pa-python inside Krita and signing from it wait on first
-  run (piece 2 of the handover). S3 and S5 haven't run. S2: c2pa-python and c2patool accept the
-  certificate profile and validate the samples, but the Adobe check is **pending**. On 13 Oct
-  2026 Adobe's Verify (verify.contentauthenticity.org) answered "Something went wrong" for
-  every upload, unrelated images included. Adobe Content Authenticity Inspect
-  (contentauthenticity.adobe.com/inspect) said "We couldn't verify how this was made" for every
-  upload, and for our samples only, also popped "Something went wrong". On 14 Oct a bisection
-  ruled out size: unsigned 16 px and 512 px PNGs drew only the generic message, and the same
-  512 px PNG signed with the `nothing_observed` or `new_document` golden popped "Something went
-  wrong". So Inspect fails on our signed files, or on every test-signed file. Our files differ
-  from c2pa-python's sample `C.jpg` (claim v1, PS256, timestamped 2023) in claim version (v2)
-  and in having no timestamp. A second round is with the user: a minimal manifest (one
-  `c2pa.created`), then that manifest with an IPTC source type, with C2PA's public test
-  certificate, with a DigiCert timestamp, as claim v1, as JPEG, and `C.jpg` itself. Until an
-  Adobe tool reads them, c2patool and c2pa-python read-back are the verification of record.
+  run (piece 2 of the handover). S3 and S5 haven't run. **S2's Adobe check passes for a
+  minimal manifest** (14 Oct 2026). Adobe's Verify (verify.contentauthenticity.org), which
+  answered "Something went wrong" to every upload on 13 Oct, now reads a PNG carrying one
+  `c2pa.created` action, signed with our test certificate (the profile `keys.py` makes). It
+  shows "Created with krita-provenance" and "These Content Credentials were issued by an
+  unrecognized source", as S2 expects. It reads the same with an IPTC source type, with C2PA's
+  public test certificate, as JPEG and as claim v1 (plus "This file uses a legacy version of
+  the C2PA Technical Specification"). With a DigiCert timestamp it also shows the signing
+  date; without one it shows no date. c2pa-python's sample `C.jpg` reads too. **Still open:**
+  the full manifests. Inspect popped "Something went wrong" for the `nothing_observed` and
+  `new_document` goldens on 13 and 14 Oct, at 16 px and at 512 px, while unsigned images drew
+  only "We couldn't verify how this was made". Nobody has uploaded a full manifest to Verify
+  since it recovered, and the M1 gate needs Verify to show the actions. The goldens' regions
+  (up to 2048 px) lie outside those images, a suspect. Round-3 files are with the user: each
+  action type added alone to the minimal manifest, a region inside and one outside the image,
+  and the full `new_document` manifest on a 2048 px image that contains its regions. Until
+  then c2patool and c2pa-python read-back are the verification of record for full manifests.
   The go/no-go note is due 25 Oct 2026.
 - **Next:** the rest of step 7 in the handover's order, stopping after each piece that touches
   Krita for the user to test it.
@@ -416,6 +425,9 @@ Raise these with the user rather than settling them silently.
   like is the glue's; `installer.install` reports progress per wheel.
 - P1's debounce is dropped (user, 14 Oct 2026): Krita has no before-save signal and
   `imageSaved` fires after the file is written, so every change is written at once.
+- Without a timestamp, Adobe's Verify shows no date for a file's credentials; with one it shows
+  the signing date (14 Oct 2026). Timestamps stay off for v0.1 (decision 6 of the second set);
+  this is input for K3 and Q4.
 - An `exported` event (piece 4) is appended to a document that may have no unsaved changes, and
   the write marks it modified, so Krita will ask to save on close. Keeping that prompt lets the
   user keep the event; clearing the mark would lose the event when they close without saving.

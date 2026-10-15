@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -267,7 +267,7 @@ def test_an_existing_document_opens_its_kra_and_discloses_the_unobserved_past():
     )
     assert "harbour" not in actions[1]["description"]  # names no file: safe to show anywhere
     assert mapping.ai_use_statement(entry) == (
-        "1 AI generation observed by this plugin since 5 November 2026."
+        "1 AI generation observed by this plugin since 5 November 2026 (UTC)."
         " The document already had content on that date; earlier AI use, if any, is not recorded."
     )
 
@@ -276,16 +276,26 @@ def test_ai_use_statement_reads_absence_as_not_observed():
     entry, _, _ = load_case("nothing_observed")
     assert (
         mapping.ai_use_statement(entry)
-        == "No AI generation observed by this plugin since 4 November 2026."
+        == "No AI generation observed by this plugin since 4 November 2026 (UTC)."
     )
     entry, _, _ = load_case("new_document")
     assert mapping.ai_use_statement(entry) == (
-        "1 AI generation observed by this plugin since 2 November 2026."
+        "1 AI generation observed by this plugin since 2 November 2026 (UTC)."
         " Capture was interrupted 1 time; see the log for when."
     )
     entry, _, _ = load_case("opened_image")
     assert mapping.ai_use_statement(entry).startswith(
-        "3 AI generations observed by this plugin since 3 November 2026."
+        "3 AI generations observed by this plugin since 3 November 2026 (UTC)."
+    )
+
+
+def test_ai_use_statement_gives_the_utc_date_and_says_so():
+    """Smoke row 9, 14 Oct 2026: a log started at 9:49 pm on 14 October in California is dated
+    15 October in UTC; unmarked, that read as a day off."""
+    evening = datetime(2026, 10, 14, 21, 49, 8, tzinfo=timezone(timedelta(hours=-7)))
+    entry = ProvenanceLog("doc", LogStart(evening, log.NEW_DOCUMENT))
+    assert mapping.ai_use_statement(entry) == (
+        "No AI generation observed by this plugin since 15 October 2026 (UTC)."
     )
 
 

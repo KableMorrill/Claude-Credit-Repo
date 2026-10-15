@@ -56,7 +56,9 @@ def test_summary_names_the_document_and_counts_events():
     assert lines[0] == f"Document id: {entry.document_id}"
     assert lines[1] == "Log started: 2026-11-02T18:04:11Z (existing_document)"
     assert lines[2] == "Events: 1 capture_gap, 1 ingredient_added"
-    assert lines[3].startswith("No AI generation observed by this plugin since 2 November 2026.")
+    assert lines[3].startswith(
+        "No AI generation observed by this plugin since 2 November 2026 (UTC)."
+    )
 
 
 def test_append_keeps_every_past_event_and_adds_one_at_the_end():
