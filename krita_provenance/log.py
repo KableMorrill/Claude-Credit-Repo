@@ -36,8 +36,12 @@ EXISTING_DOCUMENT = (
 
 # capture_gap.reason (C3)
 PLUGIN_OFF = "plugin_off"
-ADAPTER_ERROR = "adapter_error"
+ADAPTER_ERROR = "adapter_error"  # one applied result that could not be recorded: "to" == "from"
 AI_DIFFUSION_MISSING = "ai_diffusion_missing"
+# Krita AI Diffusion was running but the adapter couldn't follow it. Logged when the plugin
+# begins observing a document in that Krita session, with "to" == "from": the gap lasted until
+# Krita closed, which nothing records.
+AI_DIFFUSION_UNOBSERVED = "ai_diffusion_unobserved"
 
 # source.tool
 AI_DIFFUSION = "krita-ai-diffusion"

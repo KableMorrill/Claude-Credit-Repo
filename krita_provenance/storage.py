@@ -25,12 +25,23 @@ from __future__ import annotations
 from datetime import datetime
 
 from . import log
-from .log import ANNOTATION, Event, IngredientAdded, LogFormatError, ProvenanceLog
+from .log import (
+    ANNOTATION,
+    CaptureGap,
+    Event,
+    Exported,
+    GenerationApplied,
+    IngredientAdded,
+    LayerChanged,
+    LogFormatError,
+    ProvenanceLog,
+)
 from .mapping import ai_use_statement
 from .scrub import file_name
 
 DESCRIPTION = "krita-provenance log: AI generations and layer edits observed in this document"
 DOCUMENT_SUFFIXES = (".kra", ".ora")
+SUMMARY_EVENTS = 8  # how many recent events Log Status lists
 
 
 class StorageError(Exception):
@@ -82,15 +93,42 @@ def append(annotation: bytes | None, file_name_: str | None, event: Event) -> by
     return serialize(entry)
 
 
-def summary(entry: ProvenanceLog) -> str:
-    """What the Log Status action shows: enough to see that the log survived a save."""
+def summary(entry: ProvenanceLog, latest: int = SUMMARY_EVENTS) -> str:
+    """What the Log Status action shows: enough to see that the log survived a save, and what
+    the last few events recorded. Local text: it may show layer names, which can hold prompts."""
     kinds: dict[str, int] = {}
     for event in entry.events:
         kinds[log.event_type(event)] = kinds.get(log.event_type(event), 0) + 1
     counts = ", ".join(f"{n} {kind}" for kind, n in sorted(kinds.items())) or "none"
-    return "\n".join([
+    lines = [
         f"Document id: {entry.document_id}",
         f"Log started: {log.format_time(entry.started.at)} ({entry.started.reason})",
         f"Events: {counts}",
         ai_use_statement(entry),
-    ])
+    ]
+    if entry.events:
+        shown = entry.events[-latest:]
+        heading = "Latest events:" if len(shown) < len(entry.events) else "Events, oldest first:"
+        lines += ["", heading, *(event_line(event) for event in shown)]
+    return "\n".join(lines)
+
+
+def event_line(event: Event) -> str:
+    """One event in a line, for Log Status."""
+    if isinstance(event, GenerationApplied):
+        layer = event.target_layer
+        where = f"on layer {layer.name}" if layer else "layer not identified"
+        return (
+            f"{log.format_time(event.at)}  AI generation: {event.source.tool}"
+            f" {event.source.version}, {event.job.workflow_kind}, seed {event.job.seed}, {where}"
+        )
+    if isinstance(event, CaptureGap):
+        return f"{log.format_time(event.start)}  capture gap: {event.reason}"
+    if isinstance(event, IngredientAdded):
+        return f"{log.format_time(event.at)}  {event.relationship}: {event.title}"
+    if isinstance(event, LayerChanged):
+        return f"{log.format_time(event.at)}  layer changed: {event.layer.name}"
+    if isinstance(event, Exported):
+        signed = "signed" if event.manifest_label else "unsigned"
+        return f"{log.format_time(event.at)}  exported {event.format}, {signed}"
+    return f"event of a newer type: {log.event_type(event)}"

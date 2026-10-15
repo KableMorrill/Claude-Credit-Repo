@@ -61,6 +61,12 @@ def test_reports_the_plugins_own_install_before_it_is_on_sys_path():
     assert collect(installed=Installed("win32-x86_64", "3.13", {})).c2pa_python is None
 
 
+def test_reports_generation_capture_once_the_adapter_has_tried():
+    line = "Generation capture: observing Krita AI Diffusion 1.53.0."
+    assert collect(capture=line).to_text().splitlines()[-1] == line
+    assert "Generation capture" not in collect().to_text()
+
+
 def test_flags_python_older_than_c2pa_python_supports():
     old = Environment("0.1.0", (3, 9, 18), None, ("PyQt5",), "not installed", None)
     assert old.problems() == ["Python 3.9.18 is older than 3.10, which c2pa-python needs."]

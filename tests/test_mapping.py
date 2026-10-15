@@ -289,6 +289,16 @@ def test_ai_use_statement_reads_absence_as_not_observed():
     )
 
 
+def test_a_session_krita_ai_diffusion_couldnt_be_followed_in_has_no_known_end():
+    gap = CaptureGap(T0, T0, log.AI_DIFFUSION_UNOBSERVED)
+    statement = mapping.gap_statement(gap)
+    assert statement.startswith(f"Capture gap from {log.format_time(T0)} until Krita was closed")
+    assert "could not observe it" in statement and " to " not in statement
+    assert mapping.gap_statement(CaptureGap(T0, T0, log.ADAPTER_ERROR)).startswith(
+        f"Capture gap from {log.format_time(T0)} to {log.format_time(T0)}"
+    )
+
+
 def test_ai_use_statement_gives_the_utc_date_and_says_so():
     """Smoke row 9, 14 Oct 2026: a log started at 9:49 pm on 14 October in California is dated
     15 October in UTC; unmarked, that read as a day off."""

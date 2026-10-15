@@ -11,8 +11,9 @@ crowdfunding campaign, and it works alongside
 > items under Tools ▸ Scripts: Provenance: Check Environment, which reports the Python, Qt,
 > Krita AI Diffusion and c2pa-python versions Krita can see; Provenance: Log Status, which
 > shows the document's log; and Provenance: Set Up Signing, which, after asking, downloads
-> the pinned packages, makes a local signing certificate and signs a test image. Generations
-> aren't recorded in the log yet. The
+> the pinned packages, makes a local signing certificate and signs a test image. With Krita AI
+> Diffusion running, each result applied from its history is recorded in the document's log;
+> live painting, upscaling and control-layer results are not observed yet. The
 > Krita-free core exists and is tested: the log format, scrubbing, the log-to-C2PA mapping,
 > signing with c2pa-python, local signing keys made with cryptography, and the pinned wheel
 > installer, with golden manifests that sign and validate. Capture and signed export inside

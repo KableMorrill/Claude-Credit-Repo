@@ -346,6 +346,12 @@ _MONTHS = (
 
 
 def gap_statement(gap: CaptureGap) -> str:
+    if gap.reason == log.AI_DIFFUSION_UNOBSERVED:  # its end isn't known: it ran until Krita closed
+        return (
+            f"Capture gap from {format_time(gap.start)} until Krita was closed (Krita AI Diffusion"
+            " was running, but this plugin could not observe it): AI generations in this period"
+            " were not observed by this plugin."
+        )
     reason = GAP_REASONS.get(gap.reason, gap.reason)
     return (
         f"Capture gap from {format_time(gap.start)} to {format_time(gap.end)} ({reason}):"

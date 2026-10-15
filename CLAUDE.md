@@ -38,10 +38,13 @@ Then the rest of step 7, in this order, each piece committed with the four check
    `keys.ensure(folder / "keys")`, and a self-test that signs a blank PNG and reads it back.
    The report shows the certificate (`KeyFiles.info().to_text()`), or `plan.unavailable` where
    K1 isn't possible. Packages join `sys.path` only when signing needs them, not at startup.
-3. Adapter `krita_provenance/adapters/ai_diffusion.py` (the only importer of `ai_diffusion`):
-   find the per-document model via `root.model_for_active_document()`, snapshot node unique
-   IDs before the apply, connect `jobs.result_used`, copy `JobParams` into a
-   `log.GenerationApplied`, and append a `CaptureGap` on any failure (C3). Facts are below.
+3. Adapter. **Built 15 Oct 2026, waiting on smoke rows 17 to 22 (S3).**
+   `krita_provenance/adapters/ai_diffusion.py` (the only importer of `ai_diffusion`, Krita-free)
+   follows every model through `root.models` and `root.model_created` rather than
+   `model_for_active_document()`. It connects `jobs.result_used` and copies `JobParams` into a
+   `log.GenerationApplied`. `extension.py` attaches it once all plugins have loaded, keeps a
+   half-second snapshot of the active document's node ids as C2's "before", appends the event
+   at once, and logs a `CaptureGap` on any failure (C3).
 4. Export action: `Document.exportImage` to a temp PNG/JPEG, `mapping.manifest`,
    `sdk.sign_file`; on `SigningError` save under `sdk.unsigned_name`. For an
    `existing_document` with unsaved changes show "Save and export signed" / "Export unsigned" /
@@ -155,14 +158,26 @@ test modules.
   mid-download installs nothing; it leaves the data folder and an empty `downloads` folder,
   which installer.py keeps on purpose (removing it could break a second install running at the
   same time).
+- **Step 7, piece 3 (15 Oct 2026), unverified in Krita:** the Krita AI Diffusion adapter
+  (C1 to C3). It never imports `ai_diffusion` unless Krita already has (importing it registers
+  the extension, which would revive a disabled plugin). It follows each model weakly, so a
+  closed document's model can go. Each applied result becomes a `generation_applied` event with
+  the job's params, full prompts included (they stay in the .kra), the applied image's size as
+  bounds, and the target layer. The target is the one paint layer that appeared since the last
+  snapshot; with none or several (regions, layered results), it is None, which the manifest
+  discloses. A result that can't be described becomes `capture_gap` `adapter_error`. If
+  Krita AI Diffusion runs but can't be followed, a warning says so, and each document observed
+  in that session gets `capture_gap` `ai_diffusion_unobserved`, whose statement runs "until
+  Krita was closed". Log Status lists the latest events; Check Environment and Log Status show
+  the capture status. Tested with stand-ins shaped like 1.53.0's objects.
 - **Decisions of 14 Oct 2026**, from the user: (1) P1's debounce is dropped; every change is
   written at once. (2) Plain-language statements give dates in UTC and say so: "since
   15 October 2026 (UTC)" (`mapping.ai_use_statement`). (3) Pushing to the branch so CI runs is
   approved for these commits; ask again before pushing later work.
-- **Not done:** the rest of step 7: the Krita AI Diffusion adapter (C1–C3), the export action
-  with the dialog of decision 3, the docker (V1) and the release zip (I1). **S1 passes on
-  Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs inside Krita; macOS
-  and Linux are unchecked. S3 and S5 haven't run. **S2's Adobe check passes for a
+- **Not done:** the rest of step 7: the export action with the dialog of decision 3, the docker
+  (V1) and the release zip (I1). **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and
+  c2pa-python loads and signs inside Krita; macOS and Linux are unchecked. S3 waits on smoke
+  rows 17 to 20. S5 hasn't run. **S2's Adobe check passes for a
   minimal manifest** (14 Oct 2026). Adobe's Verify (verify.contentauthenticity.org), which
   answered "Something went wrong" to every upload on 13 Oct, now reads a PNG carrying one
   `c2pa.created` action, signed with our test certificate (the profile `keys.py` makes). It
@@ -202,6 +217,7 @@ krita_provenance/          the plugin package; Krita pairs it with krita_provena
   installer.py             I2: fetch, verify, unpack, record and activate the pinned wheels
   firstrun.py              I2 + K1 at first run: data folder, consent text, install, keys, self-test
   storage.py               P1: the log as the krita-provenance.json annotation; start reason
+  adapters/ai_diffusion.py C1-C3: follows Krita AI Diffusion's models; job -> generation_applied
 krita_provenance.desktop   plugin manifest Krita reads at startup
 scripts/dev_install.py     links this checkout into Krita's pykrita folder
 scripts/make_test_certs.py makes the test certificates in tests/fixtures/certs with OpenSSL
@@ -348,6 +364,24 @@ Rely on these; check anything else against source.
   It gives a copy of an open document (same id) a new id.
 - Its LICENSE is the stock GPLv3 text with no "or later" grant, so GPL-3.0-or-later here is
   compatible (Q6).
+- Read 15 Oct 2026 for the adapter: `root = Root()` is a module-level singleton in
+  `model/root.py`; `AIToolsExtension.__init__` calls `root.init()`, and `extension.py` calls
+  `Krita.instance().addExtension(...)` at import, so importing `ai_diffusion` loads the plugin.
+  `Root.model_created` is `pyqtSignal(DocumentModel)`. `KritaDocument` keeps its Krita
+  document private (`_doc`) but exposes `is_active` and `id`, the value of its
+  `ai_diffusion/document_id` annotation.
+- Only `apply_generated_result` emits `result_used` (model.py L847–868). Live painting's
+  `LiveWorkspace.apply_result` (L1312–1325), upscaling's `add_upscale_layer` and control layers'
+  `add_control_layer`, both applied when their job finishes, don't. That answers Q10: applying
+  a live result does not fire `result_used`.
+- Generated layers are named after the prompt: `job_name` is the evaluated prompt (L316) and
+  the layer is `"[Generated] {trim_text(params.name, 200)} ({seed})"` (L769); a region's layer
+  is named after the region's prompt (L790). `metadata["loras"]` holds `{"name", "weight"}`
+  for each LoRA (L324), so S3's question about LoRAs is answered: they're in the metadata.
+- `LayerManager` polls the node tree every 500 ms, and its `create()` registers a new layer at
+  once (`self.updated().wrap(node)`), so by `result_used` it already knows the new layer.
+- `eventloop.run` only schedules a task on its own asyncio loop and never processes Qt events,
+  so no Qt timer fires inside `apply_generated_result`.
 
 **c2pa-python 0.38.0** (commit `192023c`, bundling c2pa-rs v0.91.0):
 
@@ -467,6 +501,16 @@ Raise these with the user rather than settling them silently.
   like is the glue's; `installer.install` reports progress per wheel.
 - P1's debounce is dropped (user, 14 Oct 2026): Krita has no before-save signal and
   `imageSaved` fires after the file is written, so every change is written at once.
+- **Prompt text in layer names: fix before the export action ships.** Krita AI Diffusion names
+  the layers it creates after the prompt (facts, above), the log keeps `target_layer.name`, and
+  `mapping._generation` writes "on layer {name}" into the manifest. With real captures that
+  puts prompt text in exports, against the rule to keep it out until D2 and D3. Proposed:
+  manifests stop naming the target layer of a generation (the log keeps the name). Raise with
+  the user, then change the mapping and goldens (`UPDATE_GOLDENS=1`) with piece 4.
+- **Results v0.1 doesn't observe** (C7): live painting, upscaling and control-layer images
+  reach the document without `result_used`. The manifest can only say what was observed, and
+  the README should name these. Capturing upscaling and control layers through
+  `jobs.job_finished` is a possible next step.
 - **Rectangles or polygons for regions?** The spec's mapping table says rectangles, and
   `mapping.rectangle` writes them, but Adobe's Verify can't read a rectangle until it moves to
   c2pa-web 0.15.0 or later (facts, above). Writing each rectangle as its four corners is the

@@ -30,6 +30,7 @@ class Environment:
     qt_bindings: tuple[str, ...]  # bindings already loaded, normally exactly one
     ai_diffusion: str
     c2pa_python: str | None  # installed version and where, None if not installed
+    capture: str | None = None  # the adapter's status line, once it has tried to attach
 
     def problems(self) -> list[str]:
         found: list[str] = []
@@ -54,6 +55,8 @@ class Environment:
             f"Krita AI Diffusion: {self.ai_diffusion}",
             f"c2pa-python: {self.c2pa_python or NOT_INSTALLED}",
         ]
+        if self.capture:
+            lines.append(self.capture)
         if problems := self.problems():
             lines += ["", "Problems:", *(f"- {problem}" for problem in problems)]
         return "\n".join(lines)
@@ -66,6 +69,7 @@ def collect_environment(
     find_spec: Callable[[str], object | None] = importlib.util.find_spec,
     dist_version: Callable[[str], str] = importlib.metadata.version,
     installed: Installed | None = None,
+    capture: str | None = None,
 ) -> Environment:
     """Collect the facts without importing anything new. Lookups are injectable for tests.
 
@@ -79,6 +83,7 @@ def collect_environment(
         qt_bindings=tuple(name for name in BINDINGS if name in modules),
         ai_diffusion=_ai_diffusion_status(modules, find_spec),
         c2pa_python=_c2pa_status(dist_version, installed),
+        capture=capture,
     )
 
 

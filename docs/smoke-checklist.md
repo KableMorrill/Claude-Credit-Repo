@@ -68,6 +68,22 @@ S1 passes on Windows when row 13 holds: c2pa-python loads in Krita's own Python 
 a download fails with an SSL or certificate error, note the message: Krita's Python may lack
 the certificates urllib needs.
 
+### Generation capture (step 7, piece 3; spike S3)
+
+Krita AI Diffusion enabled and connected to its server.
+
+| # | In Krita | Expected |
+| --- | --- | --- |
+| 17 | Restart Krita, then Tools ▸ Scripts ▸ Provenance: Check Environment | The last line reads "Generation capture: observing Krita AI Diffusion 1.53.0." and no capture warning appeared at startup |
+| 18 | New document. Generate with Krita AI Diffusion and apply one result (the default puts it on a new layer). Run Log Status | "Events: 1 generation_applied" and "1 AI generation observed by this plugin since … (UTC)". The event line names the workflow (generate), the seed, and "on layer [Generated] … (seed)", the layer that just appeared. No warning dialog |
+| 19 | Select an area, inpaint, apply that result, then apply a second result from the history. Run Log Status | Three generation_applied lines in all, the new two with workflow inpaint, each naming its own new layer |
+| 20 | Save as .kra, close, reopen, run Log Status | The same three events after reopening |
+| 21 | Optional, if you use Live: apply a live result | No new event. Krita AI Diffusion 1.53.0 doesn't announce live results (Q10, from its source), so v0.1 doesn't record them |
+| 22 | Optional: two regions, generate, apply | One generation_applied ending "layer not identified": several layers appeared, and which holds what isn't known |
+
+S3 passes when rows 18 to 20 hold: the plugin catches `result_used`, copies the job's
+parameters and identifies the layer that received the result.
+
 ## Results
 
 | Date | Setup | Rows | Result |

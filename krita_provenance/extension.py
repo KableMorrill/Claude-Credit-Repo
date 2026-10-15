@@ -13,22 +13,31 @@ it passes as soon as its handlers return.
 
 The first run's download runs on a Python thread. Its progress and result reach the GUI thread
 through the signals of a QObject made in the GUI thread, so every dialog call happens there.
+
+Capture (C1 to C3): once every plugin has loaded, the Krita AI Diffusion adapter follows its
+document models. Krita AI Diffusion adds the result's layer before it emits result_used, so C2's
+"before" is a snapshot of the active document's node ids, refreshed every half second by a timer
+that can't fire in the middle of an apply. The layer that appeared since is the target.
 """
 
 import threading
 from pathlib import Path
+from typing import Any
 
-from krita import Document, Extension, Krita, Window
+from krita import Document, Extension, Krita, Node, Window
 
-from . import firstrun, installer, keys, sdk, storage
+from . import firstrun, installer, keys, log, sdk, storage
+from .adapters import ai_diffusion
 from .environment import collect_environment
-from .log import ANNOTATION, ProvenanceLog
+from .log import ANNOTATION, CaptureGap, ProvenanceLog
 from .qt import QtCore, QtWidgets
 
 ENVIRONMENT_ACTION_ID = "krita_provenance_environment"
 LOG_STATUS_ACTION_ID = "krita_provenance_log_status"
 SET_UP_ACTION_ID = "krita_provenance_set_up_signing"
 SET_UP_TITLE = "Provenance: Set Up Signing"
+CAPTURE_TITLE = "Provenance capture"
+SNAPSHOT_INTERVAL_MS = 500  # as Krita AI Diffusion polls its own layer list
 
 
 class ProvenanceExtension(Extension):
@@ -37,6 +46,7 @@ class ProvenanceExtension(Extension):
         notifier.setActive(True)
         # The vendored stubs declare Notifier's signals as plain methods.
         notifier.imageCreated.connect(_start_log)  # pyright: ignore[reportAttributeAccessIssue]
+        QtCore.QTimer.singleShot(0, _attach_adapter)  # after every plugin has loaded
 
     def createActions(self, window: Window) -> None:
         action = window.createAction(
@@ -59,6 +69,9 @@ class _Relay(QtCore.QObject):
 
 
 _first_run: "tuple[_Relay, QtWidgets.QProgressDialog] | None" = None  # alive while it runs
+_snapshot: "tuple[str, frozenset[str]] | None" = None  # (active document's root id, node ids)
+_poller: "QtCore.QTimer | None" = None
+_warned: set[str] = set()  # capture warnings already shown this session
 
 
 def _parent() -> QtWidgets.QWidget | None:
@@ -73,7 +86,7 @@ def _start_log(document: Document) -> None:
     if document.rootNode() is None:
         return  # no image yet (Krita.createDocument registers first); setAnnotation needs one
     try:
-        ensure_log(document)
+        ensure_log(document, _observation_gaps())
     except storage.StorageError as error:
         message = (
             f"{error}\n\nNothing will be recorded in this document, and its log is kept as is."
@@ -89,8 +102,125 @@ def _show_environment() -> None:
         installed = installer.installed(_data_folder())
     except firstrun.FirstRunError:
         installed = None
-    environment = collect_environment(krita_version=Krita.instance().version(), installed=installed)
+    environment = collect_environment(
+        krita_version=Krita.instance().version(),
+        installed=installed,
+        capture=_adapter.status.to_text(),
+    )
     QtWidgets.QMessageBox.information(_parent(), "Provenance environment", environment.to_text())
+
+
+def _attach_adapter() -> None:
+    """C1: follow Krita AI Diffusion if Krita loaded it. When it runs but can't be followed, say
+    so, and log the gap in every document observed in this session (C3)."""
+    global _poller
+    status = _adapter.attach()
+    if status.state == ai_diffusion.ATTACHED:
+        _poller = QtCore.QTimer()
+        _poller.timeout.connect(_take_snapshot)
+        _poller.start(SNAPSHOT_INTERVAL_MS)
+        _take_snapshot()
+    elif status.state == ai_diffusion.FAILED:
+        for document in Krita.instance().documents():
+            _start_log(document)  # documents opened before this ran get the gap too
+        QtWidgets.QMessageBox.warning(_parent(), CAPTURE_TITLE, status.to_text())
+
+
+def _observation_gaps() -> list[log.Event]:
+    """What the log must say when the plugin begins observing a document in this session."""
+    if _adapter.status.state != ai_diffusion.FAILED:
+        return []
+    at = log.now()
+    return [CaptureGap(at, at, log.AI_DIFFUSION_UNOBSERVED)]
+
+
+def _take_snapshot() -> None:
+    """C2's "before": the active document's node ids, between applies. It runs from a timer
+    twice a second, so it never raises: a failure leaves no snapshot, and the next apply is
+    logged with its layer unidentified, which the manifest discloses."""
+    global _snapshot
+    try:
+        document = Krita.instance().activeDocument()
+        root = document.rootNode() if document is not None else None
+        _snapshot = None if root is None else (_node_id(root), frozenset(_nodes(root)))
+    except Exception:  # noqa: BLE001 - a raising timer slot would show an error every 500 ms
+        _snapshot = None
+
+
+def _record_generation(model: Any, job_id: str, index: int) -> None:
+    """C1 to C3: an applied result goes into its document's log at once, or a gap if it can't be
+    described. Runs inside Krita AI Diffusion's apply, so warnings wait for the event loop."""
+    at = log.now()
+    try:
+        document = _document_for(model)
+    except Exception as error:  # noqa: BLE001 - its internals changed; nothing to write into
+        document, problem = None, f"{type(error).__name__}: {error}"
+    else:
+        problem = "the document wasn't found among Krita's open documents"
+    if document is None:
+        _warn_capture(f"A Krita AI Diffusion result was applied but not recorded: {problem}.")
+        return
+    try:
+        root = document.rootNode()
+        before = _snapshot[1] if _snapshot is not None and _snapshot[0] == _node_id(root) else None
+        target = None if before is None else ai_diffusion.target_layer(before, _nodes(root))
+        event: log.Event = _adapter.generation(model, job_id, index, target, at)
+    except Exception as error:  # noqa: BLE001 - any failure to describe it is a capture gap (C3)
+        event = CaptureGap(at, at, log.ADAPTER_ERROR)
+        _warn_capture(
+            f"A Krita AI Diffusion result was applied but couldn't be described"
+            f" ({type(error).__name__}: {error}); the log records a capture gap instead."
+        )
+    try:
+        append_event(document, event)
+    except storage.StorageError as error:
+        _warn_capture(f"{error}\n\nThe applied Krita AI Diffusion result is not recorded.")
+    _take_snapshot()
+
+
+_adapter = ai_diffusion.Adapter(_record_generation)
+
+
+def _document_for(model: Any) -> Document | None:
+    """The Krita document a Krita AI Diffusion model belongs to: the active one when it applies."""
+    app = Krita.instance()
+    if ai_diffusion.document_is_active(model):
+        return app.activeDocument()
+    wanted = ai_diffusion.document_id(model)
+    key = ai_diffusion.DOCUMENT_ID_ANNOTATION
+    for document in app.documents():
+        if (
+            key in document.annotationTypes()
+            and bytes(document.annotation(key)).decode("utf-8", "replace") == wanted
+        ):
+            return document
+    return None
+
+
+def _nodes(root: Node) -> dict[str, tuple[str, str]]:
+    """Every node under the root: unique id (braces included) -> (name, Node.type())."""
+    found: dict[str, tuple[str, str]] = {}
+    pending = list(root.childNodes())
+    while pending:
+        node = pending.pop()
+        found[_node_id(node)] = (node.name(), node.type())
+        pending.extend(node.childNodes())
+    return found
+
+
+def _node_id(node: Node) -> str:
+    return node.uniqueId().toString()
+
+
+def _warn_capture(message: str) -> None:
+    """Once per message and session, after the current call: a dialog inside Krita AI Diffusion's
+    apply would run a nested event loop in the middle of it."""
+    if message in _warned:
+        return
+    _warned.add(message)
+    QtCore.QTimer.singleShot(
+        0, lambda: QtWidgets.QMessageBox.warning(_parent(), CAPTURE_TITLE, message)
+    )
 
 
 def _data_folder() -> Path:
@@ -192,33 +322,52 @@ def _show_log_status() -> None:
     text = storage.summary(entry)
     if created:
         text += "\n\nThe log was just created and written to the document; save it to keep it."
+    text += f"\n\n{_adapter.status.to_text()}"
     QtWidgets.QMessageBox.information(_parent(), "Provenance log", text)
 
 
-def ensure_log(document: Document) -> tuple[ProvenanceLog, bool]:
+def ensure_log(
+    document: Document, observation: list[log.Event] | None = None
+) -> tuple[ProvenanceLog, bool]:
     """The document's log, and True if it had none and one was started and written just now.
 
-    Starting a log is not an edit, but Krita marks a document modified whenever an annotation is
-    set (KisImage::addAnnotation). A document that had no unsaved changes is marked unmodified
-    again, so Krita doesn't ask to save a file the user only opened; any later change marks it
-    modified, and that save includes the log. Events appended later keep Krita's flag.
+    ``observation`` is what the log must say as the plugin begins observing the document, such
+    as a capture gap for this session; it is appended and written with the start. Neither is an
+    edit, but Krita marks a document modified whenever an annotation is set
+    (KisImage::addAnnotation). A document that had no unsaved changes is marked unmodified again,
+    so Krita doesn't ask to save a file the user only opened; any later change marks it modified,
+    and that save includes the log. Events appended later (append_event) keep Krita's flag.
     """
     entry = read_log(document)
-    if entry is not None:
+    created = entry is None
+    if entry is None:
+        entry = storage.start(document.fileName() or None)
+    elif not observation:
         return entry, False
-    entry = storage.start(document.fileName() or None)
+    for event in observation or []:
+        entry.append(event)
     was_modified = document.modified()
     write_log(document, entry)
     if not was_modified:
         document.setModified(False)  # pyright: ignore[reportAttributeAccessIssue] (not in the stubs)
-    return entry, True
+    return entry, created
+
+
+def append_event(document: Document, event: log.Event) -> None:
+    """Append one event and write the log back at once (storage.py says why not later). Krita
+    marks the document modified, so closing it asks to save, and the save keeps the event."""
+    data = storage.append(_annotation(document), document.fileName() or None, event)
+    document.setAnnotation(ANNOTATION, storage.DESCRIPTION, data)
 
 
 def read_log(document: Document):
-    data = (
-        bytes(document.annotation(ANNOTATION)) if ANNOTATION in document.annotationTypes() else None
-    )
-    return storage.read(data)
+    return storage.read(_annotation(document))
+
+
+def _annotation(document: Document) -> bytes | None:
+    if ANNOTATION not in document.annotationTypes():
+        return None
+    return bytes(document.annotation(ANNOTATION))
 
 
 def write_log(document: Document, entry) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timezone
 
 import pytest
@@ -59,6 +60,38 @@ def test_summary_names_the_document_and_counts_events():
     assert lines[3].startswith(
         "No AI generation observed by this plugin since 2 November 2026 (UTC)."
     )
+
+
+def test_summary_lists_the_latest_events_one_per_line():
+    entry = storage.start("harbour.png", T0)
+    generation = log.GenerationApplied(
+        at=T0,
+        source=log.Source(log.AI_DIFFUSION, "1.53.0", "managed"),
+        job=log.Job("j", "diffusion", "inpaint", 0, (0, 0, 64, 64), True, 42),
+        model=log.Model(),
+        prompt=log.Prompt("a harbour", ""),
+        target_layer=log.Layer("{1}", "[Generated] a harbour (42)"),
+    )
+    entry.append(generation)
+    entry.append(dataclasses.replace(generation, target_layer=None))
+    entry.append(CaptureGap(T0, T0, log.ADAPTER_ERROR))
+    lines = storage.summary(entry).splitlines()
+    assert lines[4:] == [
+        "",
+        "Events, oldest first:",
+        "2026-11-02T18:04:11Z  parentOf: harbour.png",
+        (
+            "2026-11-02T18:04:11Z  AI generation: krita-ai-diffusion 1.53.0, inpaint, seed 42,"
+            " on layer [Generated] a harbour (42)"
+        ),
+        (
+            "2026-11-02T18:04:11Z  AI generation: krita-ai-diffusion 1.53.0, inpaint, seed 42,"
+            " layer not identified"
+        ),
+        "2026-11-02T18:04:11Z  capture gap: adapter_error",
+    ]
+    many = storage.summary(entry, latest=2).splitlines()
+    assert many[5] == "Latest events:" and len(many) == 8
 
 
 def test_append_keeps_every_past_event_and_adds_one_at_the_end():
