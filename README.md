@@ -7,10 +7,12 @@ crowdfunding campaign, and it works alongside
 [Krita AI Diffusion](https://github.com/Acly/krita-ai-diffusion).
 
 > **Status: early development.** Nothing is exported from Krita yet. The plugin loads in Krita,
-> starts a provenance log in each document it sees created or opened, and adds two menu
+> starts a provenance log in each document it sees created or opened, and adds three menu
 > items under Tools ▸ Scripts: Provenance: Check Environment, which reports the Python, Qt,
-> Krita AI Diffusion and c2pa-python versions Krita can see, and Provenance: Log Status, which
-> shows the document's log. Generations aren't recorded in the log yet. The
+> Krita AI Diffusion and c2pa-python versions Krita can see; Provenance: Log Status, which
+> shows the document's log; and Provenance: Set Up Signing, which, after asking, downloads
+> the pinned packages, makes a local signing certificate and signs a test image. Generations
+> aren't recorded in the log yet. The
 > Krita-free core exists and is tested: the log format, scrubbing, the log-to-C2PA mapping,
 > signing with c2pa-python, local signing keys made with cryptography, and the pinned wheel
 > installer, with golden manifests that sign and validate. Capture and signed export inside
@@ -85,10 +87,10 @@ installing a release zip, so the zip doesn't land in your checkout.
 - c2pa-python is used only through `krita_provenance/sdk.py`, cryptography only through
   `krita_provenance/keys.py`, and Krita AI Diffusion's internals only through
   `krita_provenance/adapters/ai_diffusion.py`, so changes upstream stay in one place.
-- The plugin's own copies of c2pa-python, cryptography and cffi will be fetched on first run,
-  checked against the sizes and SHA-256 digests pinned in `krita_provenance/wheel_pins.py`,
-  and unpacked into the plugin's data folder. The installer and the pin table exist and are
-  tested; the Krita glue that runs them at first run is not built yet.
+- The plugin's own copies of c2pa-python, cryptography and cffi are fetched by Tools ▸ Scripts
+  ▸ Provenance: Set Up Signing, after it asks, checked against the sizes and SHA-256 digests
+  pinned in `krita_provenance/wheel_pins.py`, and unpacked into the plugin's data folder (a
+  `krita-provenance` folder in Krita's app-data location, never inside the plugin folder).
   `scripts/update_wheel_pins.py` regenerates the pins from PyPI.
 
 The test certificates in `tests/fixtures/certs` are made by `scripts/make_test_certs.py` and are

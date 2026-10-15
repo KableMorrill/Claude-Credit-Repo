@@ -31,12 +31,12 @@ Then the rest of step 7, in this order, each piece committed with the four check
    document. The user agreed to dropping the debounce on 14 Oct 2026. Row 11 found that
    writing an annotation marks the document modified; `extension.ensure_log` now clears the
    mark after starting a log in a document that had no unsaved changes.
-2. First run: data folder = a `krita-provenance` subfolder under Krita's app-data location
-   (`QStandardPaths.AppDataLocation`), never the plugin folder. `installer.plan()` then
-   `installer.install(folder, plan, progress=...)` behind a progress dialog, `installer.activate`
-   before any `sdk`/`keys` call, then `keys.ensure(folder / "keys")` and show
-   `KeyFiles.info().to_text()`. On a platform where `plan.supports_k1` is False, show the
-   message in `plan.unavailable`.
+2. First run. **Built 14 Oct 2026, waiting on smoke rows 12 to 16.** Tools ▸ Scripts ▸
+   Provenance: Set Up Signing asks before downloading (`firstrun.consent_text`), then runs
+   `firstrun.run` on a Python thread behind a progress dialog: install, `installer.activate`,
+   `keys.ensure(folder / "keys")`, and a self-test that signs a blank PNG and reads it back.
+   The report shows the certificate (`KeyFiles.info().to_text()`), or `plan.unavailable` where
+   K1 isn't possible. Packages join `sys.path` only when signing needs them, not at startup.
 3. Adapter `krita_provenance/adapters/ai_diffusion.py` (the only importer of `ai_diffusion`):
    find the per-document model via `root.model_for_active_document()`, snapshot node unique
    IDs before the apply, connect `jobs.result_used`, copy `JobParams` into a
@@ -94,7 +94,12 @@ test modules.
   from PyPI. Real installs on this Linux x86_64 machine, on Python 3.13 and on Python 3.10 (the
   set Krita 5 fetches: c2pa-python manylinux_2_28, cryptography cp39-abi3, cffi cp310),
   downloaded, verified and unpacked all three, and a clean Python imported them from the
-  folder. The macOS and Windows wheel sets have not been fetched through the installer.
+  folder. On 14 Oct 2026 `firstrun.run` did the same on the user's Windows 11 machine, outside
+  Krita, in a Python 3.12 venv: c2pa-python win_amd64, cryptography cp311-abi3 win_amd64 and
+  cffi cp312 (91.9 MB, 6.3 s). It loaded c2pa and cryptography from the data folder, made the
+  keys, and the self-test read back Valid with only the untrusted signer. A second run took
+  0.3 s and kept the key. Krita's Python 3.13 differs only in taking cffi cp313. The macOS set
+  hasn't been fetched through the installer.
 - **Decisions of 13 Oct 2026, second set**, from the user, for step 7:
   1. **Root key:** discarded after issuing the signer certificate. Rotation (K4, later) means a
      new root and signer with a new fingerprint. Built: `keys.py` writes three files.
@@ -135,6 +140,15 @@ test modules.
   one isn't an edit). Events appended later keep the flag Krita sets. The rerun of row 11
   passes for this plugin: Krita still asks while Krita AI Diffusion is enabled, because it
   writes its own document id into a document it hasn't seen, and doesn't ask with it disabled.
+- **Step 7, piece 2 (14 Oct 2026), unverified in Krita:** `firstrun.py` (Krita-free, tested
+  with faked downloads and the real c2pa-python and cryptography) holds the data folder rule
+  (refuses a folder inside the plugin), the consent text, overall progress and cancellation,
+  install → activate → keys → self-test, and the report. The report flags any of c2pa,
+  cryptography or cffi loaded from outside the verified install, because then the running code
+  isn't the code whose SHA-256 was checked. `extension.py` adds Provenance: Set Up Signing; a
+  QObject made in the GUI thread carries the worker's progress and result back to it. Check
+  Environment reports the plugin's own install even before it joins `sys.path`. Smoke rows 12
+  to 16 check it; row 13 passing completes S1 on Windows.
 - **Decisions of 14 Oct 2026**, from the user: (1) P1's debounce is dropped; every change is
   written at once. (2) Plain-language statements give dates in UTC and say so: "since
   15 October 2026 (UTC)" (`mapping.ai_use_statement`). (3) Pushing to the branch so CI runs is
@@ -180,6 +194,7 @@ krita_provenance/          the plugin package; Krita pairs it with krita_provena
   wheels.py                I2: which pinned wheel fits a platform and Python (stdlib only)
   wheel_pins.py            I2: GENERATED pins: file names, URLs, sizes, SHA-256 (do not edit)
   installer.py             I2: fetch, verify, unpack, record and activate the pinned wheels
+  firstrun.py              I2 + K1 at first run: data folder, consent text, install, keys, self-test
   storage.py               P1: the log as the krita-provenance.json annotation; start reason
 krita_provenance.desktop   plugin manifest Krita reads at startup
 scripts/dev_install.py     links this checkout into Krita's pykrita folder
@@ -411,6 +426,11 @@ methods, so `.connect` on them needs a `pyright: ignore`.
   ever sets it active.
 - The PNG exporter writes only the `kpp_version` and `kpp_preset` annotations, and the JPEG
   exporter writes none: ordinary PNG and JPEG exports carry neither our log nor `ui.json`.
+
+**Windows paths** (14 Oct 2026): unpacking cryptography failed with "No such file or
+directory" when the data folder sat about 150 characters deep, because a staged file's path
+passed 260 characters. `installer.write_failure` now names the limit. The real data folder
+(`%APPDATA%\krita\krita-provenance`) keeps the longest path near 150 characters.
 
 ## Open technical questions
 

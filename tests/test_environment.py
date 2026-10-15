@@ -4,6 +4,7 @@ import types
 
 from krita_provenance import __version__
 from krita_provenance.environment import Environment, collect_environment
+from krita_provenance.installer import Installed
 
 
 def not_found(name: str) -> None:
@@ -50,6 +51,16 @@ def test_reports_c2pa_python_version():
     assert collect().c2pa_python is None
 
 
+def test_reports_the_plugins_own_install_before_it_is_on_sys_path():
+    own = Installed("win32-x86_64", "3.13", {"c2pa-python": "0.38.0", "cffi": "2.1.1"})
+    assert collect(installed=own).c2pa_python == (
+        "0.38.0 (installed by this plugin; loads when signing)"
+    )
+    loaded = collect(dist_version=lambda distribution: "0.38.0", installed=own)
+    assert loaded.c2pa_python == "0.38.0"  # importable now: the plain version
+    assert collect(installed=Installed("win32-x86_64", "3.13", {})).c2pa_python is None
+
+
 def test_flags_python_older_than_c2pa_python_supports():
     old = Environment("0.1.0", (3, 9, 18), None, ("PyQt5",), "not installed", None)
     assert old.problems() == ["Python 3.9.18 is older than 3.10, which c2pa-python needs."]
@@ -70,7 +81,7 @@ def test_text_lists_every_fact_then_problems():
         "Python: 3.9.0",
         "Qt binding: PyQt5",
         "Krita AI Diffusion: 1.53.0 (loaded)",
-        "c2pa-python: not installed",
+        "c2pa-python: not installed (Tools ▸ Scripts ▸ Provenance: Set Up Signing installs it)",
         "",
         "Problems:",
         "- Python 3.9.0 is older than 3.10, which c2pa-python needs.",

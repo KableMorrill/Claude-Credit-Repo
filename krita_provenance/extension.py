@@ -10,17 +10,25 @@ deleted" (seen in Krita 5.3 on Windows, 13 Oct 2026). Handlers therefore take no
 look up the active window and document when they fire; tests/test_architecture.py checks that
 no handler closes over the createActions parameter. Notifier.imageCreated deletes the Document
 it passes as soon as its handlers return.
+
+The first run's download runs on a Python thread. Its progress and result reach the GUI thread
+through the signals of a QObject made in the GUI thread, so every dialog call happens there.
 """
+
+import threading
+from pathlib import Path
 
 from krita import Document, Extension, Krita, Window
 
-from . import storage
+from . import firstrun, installer, keys, sdk, storage
 from .environment import collect_environment
 from .log import ANNOTATION, ProvenanceLog
 from .qt import QtCore, QtWidgets
 
 ENVIRONMENT_ACTION_ID = "krita_provenance_environment"
 LOG_STATUS_ACTION_ID = "krita_provenance_log_status"
+SET_UP_ACTION_ID = "krita_provenance_set_up_signing"
+SET_UP_TITLE = "Provenance: Set Up Signing"
 
 
 class ProvenanceExtension(Extension):
@@ -39,6 +47,18 @@ class ProvenanceExtension(Extension):
             LOG_STATUS_ACTION_ID, "Provenance: Log Status", "tools/scripts"
         )
         status.triggered.connect(_show_log_status)
+        set_up = window.createAction(SET_UP_ACTION_ID, SET_UP_TITLE, "tools/scripts")
+        set_up.triggered.connect(_set_up_signing)
+
+
+class _Relay(QtCore.QObject):
+    """Carries the first run's progress and result from its thread to the GUI thread."""
+
+    progressed = QtCore.pyqtSignal(int, int, str)  # bytes done, bytes in all, what's happening
+    finished = QtCore.pyqtSignal(object)  # a firstrun.Report, or the exception that stopped it
+
+
+_first_run: "tuple[_Relay, QtWidgets.QProgressDialog] | None" = None  # alive while it runs
 
 
 def _parent() -> QtWidgets.QWidget | None:
@@ -65,8 +85,96 @@ def _start_log(document: Document) -> None:
 
 
 def _show_environment() -> None:
-    environment = collect_environment(krita_version=Krita.instance().version())
+    try:
+        installed = installer.installed(_data_folder())
+    except firstrun.FirstRunError:
+        installed = None
+    environment = collect_environment(krita_version=Krita.instance().version(), installed=installed)
     QtWidgets.QMessageBox.information(_parent(), "Provenance environment", environment.to_text())
+
+
+def _data_folder() -> Path:
+    """Decision 5 of the second set: a krita-provenance folder in Krita's app-data location."""
+    location = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.AppDataLocation)
+    return firstrun.data_folder(location)
+
+
+def _set_up_signing() -> None:
+    """I2 and K1: after the user agrees, fetch the pinned wheels, make the local keys and sign a
+    test image (spike S1). Nothing is downloaded without asking; running it again only checks."""
+    global _first_run
+    if _first_run is not None:
+        _first_run[1].show()  # already running
+        return
+    try:
+        folder = _data_folder()
+        wanted = installer.plan()
+    except (firstrun.FirstRunError, installer.InstallError) as error:
+        QtWidgets.QMessageBox.warning(_parent(), SET_UP_TITLE, str(error))
+        return
+    if not installer.is_current(folder, wanted):
+        answer = QtWidgets.QMessageBox.question(
+            _parent(),
+            SET_UP_TITLE,
+            firstrun.consent_text(wanted, folder),
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
+            QtWidgets.QMessageBox.Cancel,
+        )
+        if answer != QtWidgets.QMessageBox.Yes:
+            return
+
+    dialog = QtWidgets.QProgressDialog("Starting…", "Cancel", 0, 1000, _parent())
+    dialog.setWindowTitle(SET_UP_TITLE)
+    dialog.setWindowModality(QtCore.Qt.WindowModal)
+    dialog.setMinimumDuration(0)
+    dialog.setAutoClose(False)
+    dialog.setAutoReset(False)
+    relay = _Relay()  # made here, in the GUI thread, so its signals are delivered here
+    cancelled = threading.Event()
+
+    def show_progress(done: int, total: int, label: str) -> None:
+        if cancelled.is_set():
+            return  # Qt re-shows a cancelled dialog on setValue; the worker stops at its next step
+        dialog.setValue(1000 * done // total if total else 1000)
+        dialog.setLabelText(label)
+
+    def work() -> None:
+        try:
+            result: object = firstrun.run(
+                folder, wanted, progress=relay.progressed.emit, cancelled=cancelled
+            )
+        except Exception as error:  # noqa: BLE001 - an escape would leave the dialog up forever
+            result = error  # _first_run_finished shows it
+        relay.finished.emit(result)
+
+    relay.progressed.connect(show_progress)
+    relay.finished.connect(_first_run_finished)
+    dialog.canceled.connect(cancelled.set)
+    _first_run = (relay, dialog)
+    dialog.show()
+    threading.Thread(target=work, name="krita-provenance first run", daemon=True).start()
+
+
+def _first_run_finished(result: object) -> None:
+    global _first_run
+    if _first_run is not None:
+        dialog = _first_run[1]
+        _first_run = None
+        dialog.hide()
+        dialog.deleteLater()
+    if isinstance(result, firstrun.Report):
+        show = QtWidgets.QMessageBox.information if result.ready else QtWidgets.QMessageBox.warning
+        show(_parent(), SET_UP_TITLE, result.to_text())
+    elif isinstance(result, firstrun.Cancelled):
+        QtWidgets.QMessageBox.information(_parent(), SET_UP_TITLE, str(result))
+    elif isinstance(
+        result, (installer.InstallError, keys.KeysError, firstrun.FirstRunError, sdk.SdkError)
+    ):
+        QtWidgets.QMessageBox.warning(_parent(), SET_UP_TITLE, str(result))
+    else:
+        QtWidgets.QMessageBox.warning(
+            _parent(), SET_UP_TITLE, f"Setting up signing failed unexpectedly: {result!r}"
+        )
 
 
 def _show_log_status() -> None:

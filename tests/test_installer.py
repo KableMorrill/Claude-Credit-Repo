@@ -334,6 +334,29 @@ def test_a_file_that_is_not_a_wheel_is_refused(tmp_path: Path, alpha):
         )
 
 
+def test_a_file_that_cannot_be_written_stops_the_unpack_with_a_clear_error(tmp_path: Path, alpha):
+    wheel_path = tmp_path / alpha[0].filename
+    wheel_path.write_bytes(alpha[1])
+    destination = tmp_path / "site"
+    destination.mkdir()
+    (destination / "alpha").write_bytes(b"")  # a file where the wheel needs a folder
+    with pytest.raises(InstallError, match=f"{alpha[0].filename} could not be unpacked: "):
+        installer.unpack(wheel_path, destination)
+
+
+def test_a_path_past_windows_limit_is_named_as_such():
+    """Windows reports a path over 260 characters as "No such file or directory" (14 Oct 2026)."""
+    error = FileNotFoundError(2, "No such file or directory")
+    deep = Path("C:/" + "d" * 240) / "cryptography" / "cobblestone.pyi"
+    message = installer.write_failure("cryptography.whl", deep, error, system="win32")
+    assert f"{len(str(deep))} characters long, past Windows' 260-character limit" in message
+    short = Path("C:/data/cryptography/cobblestone.pyi")
+    assert installer.write_failure("cryptography.whl", short, error, system="win32") == (
+        f"cryptography.whl could not be unpacked: {error}"
+    )
+    assert "260" not in installer.write_failure("c.whl", deep, error, system="linux")
+
+
 def test_installed_record_is_read_defensively(tmp_path: Path):
     site = installer.site_packages(tmp_path)
     site.mkdir(parents=True)

@@ -52,6 +52,22 @@ also marks the document modified. If row 11 asks to save, run it again with Krit
 disabled in the Python Plugin Manager (restart Krita, and re-enable it afterwards). If Krita
 then doesn't ask, the prompt comes from Krita AI Diffusion, not this plugin.
 
+### First run: packages and signing key (step 7, piece 2; spike S1)
+
+Needs an internet connection; it downloads about 92 MB on Windows, 19 MB elsewhere.
+
+| # | In Krita | Expected |
+| --- | --- | --- |
+| 12 | Tools ▸ Scripts ▸ Provenance: Set Up Signing, then Cancel | A dialog names c2pa-python 0.38.0, cryptography 50.0.2 and cffi 2.1.1 with their sizes, PyPI as the source, the SHA-256 check, and the folder: `%APPDATA%\krita\krita-provenance` on Windows, not inside `pykrita`. After Cancel nothing is downloaded |
+| 13 | Run it again and choose Yes | A progress dialog counts through the three downloads, then "Making the local signing certificate…" and "Signing a test image…". The report reads "Signing is set up.", lists the three packages, "Loaded: c2pa-python 0.38.0 with c2pa-rs 0.91.0", the certificate (signer "krita-provenance local signer", issued by "krita-provenance local root CA", 10 years, a SHA-256 fingerprint) and a self-test that read back Valid with the signer untrusted. No line says a package was loaded from outside the verified install |
+| 14 | Tools ▸ Scripts ▸ Provenance: Check Environment | "c2pa-python: 0.38.0" |
+| 15 | Restart Krita, run Check Environment, then Set Up Signing | Check Environment: "0.38.0 (installed by this plugin; loads when signing)". Set Up Signing asks nothing, downloads nothing ("Already installed"), and shows the same fingerprint as row 13 |
+| 16 | Optional: move the folder from row 12 aside, run Set Up Signing, choose Yes, then Cancel during the download | "Cancelled; nothing was installed." Afterwards put the folder back (it holds the key from row 13) |
+
+S1 passes on Windows when row 13 holds: c2pa-python loads in Krita's own Python and signs. If
+a download fails with an SSL or certificate error, note the message: Krita's Python may lack
+the certificates urllib needs.
+
 ## Results
 
 | Date | Setup | Rows | Result |

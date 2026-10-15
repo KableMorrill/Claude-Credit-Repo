@@ -56,6 +56,7 @@ RECORD = "installed.json"
 CHUNK = 1024 * 1024
 STALE_AFTER = 24 * 60 * 60  # seconds; a staging folder older than this belongs to no live install
 SWAP_ATTEMPTS = 5
+WINDOWS_MAX_PATH = 260  # Krita's executable isn't known to opt in to long paths
 
 Progress = Callable[[Wheel, int, int], None]  # wheel, bytes so far, bytes expected
 Fetch = Callable[[Wheel, Path, "Progress | None"], None]  # writes the wheel to the path
@@ -271,11 +272,27 @@ def unpack(wheel_path: Path, destination: Path) -> None:
                 target = root.joinpath(*parts)
                 if not target.resolve().is_relative_to(root):
                     raise InstallError(f"{wheel_path.name} has an unsafe path: {member.filename}")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(member) as source, open(target, "wb") as output:
-                    shutil.copyfileobj(source, output)
+                try:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(member) as source, open(target, "wb") as output:
+                        shutil.copyfileobj(source, output)
+                except OSError as error:
+                    raise InstallError(write_failure(wheel_path.name, target, error)) from error
     except BadZipFile as error:
         raise InstallError(f"{wheel_path.name} is not a wheel: {error}") from error
+
+
+def write_failure(wheel_name: str, target: Path, error: OSError, system: str = sys.platform) -> str:
+    """Why a file couldn't be unpacked. Windows reports a path past its 260-character limit as
+    "No such file or directory", which says nothing useful (seen 14 Oct 2026 in a deep folder)."""
+    length = len(str(target))
+    if system == "win32" and length >= WINDOWS_MAX_PATH:
+        return (
+            f"{wheel_name} could not be unpacked: a file in it would need a path {length}"
+            f" characters long, past Windows' {WINDOWS_MAX_PATH}-character limit. The data"
+            " folder is too deeply nested."
+        )
+    return f"{wheel_name} could not be unpacked: {error}"
 
 
 def dist_info(wheel_filename: str) -> str:

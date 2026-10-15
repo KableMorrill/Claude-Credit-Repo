@@ -10,11 +10,16 @@ import importlib.util
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from . import __version__
 from .qt import BINDINGS
 
+if TYPE_CHECKING:
+    from .installer import Installed
+
 MIN_PYTHON = (3, 10)  # c2pa-python 0.38 requires Python 3.10 or newer
+NOT_INSTALLED = "not installed (Tools ▸ Scripts ▸ Provenance: Set Up Signing installs it)"
 
 
 @dataclass(frozen=True)
@@ -24,7 +29,7 @@ class Environment:
     krita_version: str | None
     qt_bindings: tuple[str, ...]  # bindings already loaded, normally exactly one
     ai_diffusion: str
-    c2pa_python: str | None  # installed version, None if not installed
+    c2pa_python: str | None  # installed version and where, None if not installed
 
     def problems(self) -> list[str]:
         found: list[str] = []
@@ -47,7 +52,7 @@ class Environment:
             f"Python: {_dotted(self.python_version)}",
             f"Qt binding: {', '.join(self.qt_bindings) or 'none loaded'}",
             f"Krita AI Diffusion: {self.ai_diffusion}",
-            f"c2pa-python: {self.c2pa_python or 'not installed'}",
+            f"c2pa-python: {self.c2pa_python or NOT_INSTALLED}",
         ]
         if problems := self.problems():
             lines += ["", "Problems:", *(f"- {problem}" for problem in problems)]
@@ -60,16 +65,30 @@ def collect_environment(
     modules: Mapping[str, object] = sys.modules,
     find_spec: Callable[[str], object | None] = importlib.util.find_spec,
     dist_version: Callable[[str], str] = importlib.metadata.version,
+    installed: Installed | None = None,
 ) -> Environment:
-    """Collect the facts without importing anything new. Lookups are injectable for tests."""
+    """Collect the facts without importing anything new. Lookups are injectable for tests.
+
+    ``installed`` is the plugin's own install (installer.installed), which joins sys.path only
+    when signing needs it, so Python's own lookup misses it until then.
+    """
     return Environment(
         plugin_version=__version__,
         python_version=tuple(sys.version_info[:3]),
         krita_version=krita_version,
         qt_bindings=tuple(name for name in BINDINGS if name in modules),
         ai_diffusion=_ai_diffusion_status(modules, find_spec),
-        c2pa_python=_installed_version("c2pa-python", dist_version),
+        c2pa_python=_c2pa_status(dist_version, installed),
     )
+
+
+def _c2pa_status(dist_version: Callable[[str], str], installed: Installed | None) -> str | None:
+    version = _installed_version("c2pa-python", dist_version)
+    if version is not None:
+        return version
+    if installed is not None and "c2pa-python" in installed.packages:
+        return f"{installed.packages['c2pa-python']} (installed by this plugin; loads when signing)"
+    return None
 
 
 def _ai_diffusion_status(
