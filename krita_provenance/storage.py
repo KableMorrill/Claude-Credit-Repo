@@ -12,11 +12,15 @@ export) and a write only replaces the annotation in memory, so writing at once c
 and a save at any moment includes everything logged before it.
 
 The glue starts the log when Krita creates or opens a document (``Notifier.imageCreated``), so
-its start time is when the plugin began observing. How a log starts, from the document's file
-name alone:
+its start time is when the plugin began observing. How a log starts:
 
-- no file name: a new document, ``new_document``;
-- an image file (png, jpg, ...): ``opened_image``, the file is the ``parentOf`` ingredient;
+- no file name, blank canvas: a new document, ``new_document``;
+- no file name, content already in it (pasted, from a template, a file opened as untitled):
+  ``started_with_content``, with no parent yet (decision 2 of 16 Oct 2026); ``observation``
+  adds the parent when the plugin first sees it reopened from a saved .kra or .ora;
+- an image file (png, jpg, ...): ``opened_image``, the file is the ``parentOf`` ingredient, and
+  a copy of its bytes is kept in the ``PARENT_COPY`` annotation for signing (decision 1 of
+  16 Oct 2026);
 - a .kra or .ora: ``existing_document`` (decision 2 of 13 Oct 2026), the file is the parent.
 """
 
@@ -42,6 +46,11 @@ from .scrub import file_name
 DESCRIPTION = "krita-provenance log: AI generations and layer edits observed in this document"
 DOCUMENT_SUFFIXES = (".kra", ".ora")
 SUMMARY_EVENTS = 8  # how many recent events Log Status lists
+PARENT_COPY = "krita-provenance/ingredient-1"  # the spec's name for an ingredient's bytes (P2)
+PARENT_COPY_DESCRIPTION = "krita-provenance: a copy of the image this document was opened from"
+MAX_PARENT_COPY = (
+    256 * 1024 * 1024
+)  # bytes; a larger image isn't copied, and signing then needs it on disk
 
 
 class StorageError(Exception):
@@ -68,16 +77,69 @@ def serialize(entry: ProvenanceLog) -> bytes:
     return entry.to_json().encode("utf-8")
 
 
-def start(file_name_: str | None, at: datetime | None = None) -> ProvenanceLog:
-    """A new log for a document, with its parent ingredient when it came from a file."""
+def start(
+    file_name_: str | None,
+    at: datetime | None = None,
+    *,
+    blank: bool = True,
+    parent_copy: str | None = None,
+) -> ProvenanceLog:
+    """A new log for a document, with its parent ingredient when it came from a file.
+
+    ``blank`` says whether an untitled document's canvas was blank when Krita created it; the
+    glue checks. ``parent_copy`` names the annotation that holds an opened image's bytes, when
+    the glue kept them (``keeps_parent_copy``).
+    """
     at = at or log.now()
     name = file_name(file_name_) if file_name_ else ""
     if not name:
-        return ProvenanceLog.new(log.NEW_DOCUMENT, at)
-    reason = log.EXISTING_DOCUMENT if name.lower().endswith(DOCUMENT_SUFFIXES) else log.OPENED_IMAGE
-    entry = ProvenanceLog.new(reason, at)
-    entry.append(IngredientAdded(at, log.PARENT_OF, name))
+        return ProvenanceLog.new(log.NEW_DOCUMENT if blank else log.STARTED_WITH_CONTENT, at)
+    if is_document_file(name):
+        entry = ProvenanceLog.new(log.EXISTING_DOCUMENT, at)
+        entry.append(IngredientAdded(at, log.PARENT_OF, name))
+        return entry
+    entry = ProvenanceLog.new(log.OPENED_IMAGE, at)
+    entry.append(IngredientAdded(at, log.PARENT_OF, name, store=parent_copy))
     return entry
+
+
+def is_document_file(file_name_: str) -> bool:
+    """A Krita working document (.kra, .ora) rather than an image."""
+    return file_name_.lower().endswith(DOCUMENT_SUFFIXES)
+
+
+def keeps_parent_copy(file_name_: str | None) -> bool:
+    """Whether a new log for this file is an opened image, whose bytes the glue keeps."""
+    name = file_name(file_name_) if file_name_ else ""
+    return bool(name) and not is_document_file(name)
+
+
+def observation(
+    entry: ProvenanceLog, file_name_: str | None, at: datetime | None = None
+) -> list[Event]:
+    """Events to log as the plugin begins observing a document that already has a log.
+
+    A ``started_with_content`` document gets its parent when the plugin first sees it opened
+    from a saved .kra or .ora (decision 2 of 16 Oct 2026); from then on it can be signed.
+    """
+    name = file_name(file_name_) if file_name_ else ""
+    if entry.started.reason != log.STARTED_WITH_CONTENT or parent(entry) is not None:
+        return []
+    if not name or not is_document_file(name):
+        return []
+    return [IngredientAdded(at or log.now(), log.PARENT_OF, name)]
+
+
+def parent(entry: ProvenanceLog) -> IngredientAdded | None:
+    """The log's parentOf ingredient, if it has one."""
+    return next(
+        (
+            e
+            for e in entry.events
+            if isinstance(e, IngredientAdded) and e.relationship == log.PARENT_OF
+        ),
+        None,
+    )
 
 
 def append(annotation: bytes | None, file_name_: str | None, event: Event) -> bytes:

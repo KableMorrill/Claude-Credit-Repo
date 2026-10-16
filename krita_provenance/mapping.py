@@ -43,6 +43,9 @@ Decisions of 16 Oct 2026:
   and height (CLAUDE.md, "Older c2pa-rs can't read rectangle regions"); the area is the same.
 - A generation's description doesn't name the layer that received it: Krita AI Diffusion names
   the layers it makes after the prompt. The log keeps the name.
+- A document created with content already in it (``started_with_content``) maps like an
+  existing document once the log names its saved .kra as the parent; until then it is refused,
+  and the export action offers an unsigned file.
 """
 
 from __future__ import annotations
@@ -110,6 +113,12 @@ GAP_REASONS = {
 }
 
 _INSTANCE_NAMESPACE = uuid.UUID("5a3c0b8e-6b7f-4b1a-9d2e-7c4f1e8a9b10")  # for ingredient ids
+
+STARTED_WITH_CONTENT_UNSIGNED = (
+    "This document was created with content already in it (pasted, from a template or a file"
+    " opened as untitled), which this plugin didn't see being made. To export it signed, save it"
+    " as .kra, close it and open it again; until then it can only be exported unsigned."
+)
 
 
 class MappingError(ValueError):
@@ -189,8 +198,10 @@ def manifest(
             raise MappingError("A new document cannot also have been opened from a file")
         intent, source_type = CREATE, EMPTY
         actions.append(_action("c2pa.created", entry.started.at, krita, digitalSourceType=EMPTY))
-    elif reason in (log.OPENED_IMAGE, log.EXISTING_DOCUMENT):
+    elif reason in (log.OPENED_IMAGE, log.EXISTING_DOCUMENT, log.STARTED_WITH_CONTENT):
         if not parents:
+            if reason == log.STARTED_WITH_CONTENT:
+                raise MappingError(STARTED_WITH_CONTENT_UNSIGNED)
             raise MappingError(f"A log started as {reason!r} needs a parentOf ingredient event")
         intent, source_type = EDIT, None
         parent = _ingredient(entry, parents[0])
@@ -202,14 +213,22 @@ def manifest(
             parameters={"ingredientIds": [parent.definition["instance_id"]]},
         )
         actions.append(opened)
-        if reason == log.EXISTING_DOCUMENT:
-            # The .kra already had content: say so on the opened action, and add an action with
-            # no changes, which C2PA reads as "anything may have changed", for the unobserved past.
-            opened["description"] = (
-                f"Began observing {file_name(parents[0].title)} on"
-                f" {format_time(entry.started.at)}, when it already had content; this plugin did"
-                " not see it being created or opened."
-            )
+        if reason in (log.EXISTING_DOCUMENT, log.STARTED_WITH_CONTENT):
+            # It already had content: say so on the opened action, and add an action with no
+            # changes, which C2PA reads as "anything may have changed", for the unobserved past.
+            if reason == log.EXISTING_DOCUMENT:
+                opened["description"] = (
+                    f"Began observing {file_name(parents[0].title)} on"
+                    f" {format_time(entry.started.at)}, when it already had content; this plugin"
+                    " did not see it being created or opened."
+                )
+            else:
+                opened["description"] = (
+                    f"Began observing this document, saved as {file_name(parents[0].title)}, on"
+                    f" {format_time(entry.started.at)}, when Krita created it with content already"
+                    " in it (pasted, from a template or a file opened as untitled); this plugin did"
+                    " not see that content being made."
+                )
             actions.append(
                 _action("c2pa.unknown", None, None, description=unobserved_statement(entry))
             )
@@ -294,6 +313,11 @@ def ai_use_statement(entry: ProvenanceLog) -> str:
         text = f"{count} AI generation{plural} observed by this plugin since {since}."
     if entry.started.reason == log.EXISTING_DOCUMENT:
         text += " The document already had content on that date; earlier AI use, if any, is not recorded."
+    elif entry.started.reason == log.STARTED_WITH_CONTENT:
+        text += (
+            " The document was created with content already in it; how that content was made is"
+            " not recorded."
+        )
     if gaps:
         plural = "s" if len(gaps) != 1 else ""
         text += f" Capture was interrupted {len(gaps)} time{plural}; see the log for when."

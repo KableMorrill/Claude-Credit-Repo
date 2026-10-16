@@ -23,13 +23,14 @@ QApplication::processEvents meanwhile, so a timer fires in mid-apply (smoke rows
 16 Oct 2026). The one paint layer that appeared since the snapshot is the target.
 """
 
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
 
-from krita import Document, Extension, Krita, Node, Window
+from krita import Document, Extension, InfoObject, Krita, Node, Window
 
-from . import firstrun, installer, keys, log, sdk, storage
+from . import exporter, firstrun, installer, keys, log, mapping, sdk, storage
 from .adapters import ai_diffusion
 from .environment import collect_environment
 from .log import ANNOTATION, CaptureGap, ProvenanceLog
@@ -39,7 +40,14 @@ ENVIRONMENT_ACTION_ID = "krita_provenance_environment"
 LOG_STATUS_ACTION_ID = "krita_provenance_log_status"
 SET_UP_ACTION_ID = "krita_provenance_set_up_signing"
 SET_UP_TITLE = "Provenance: Set Up Signing"
+EXPORT_ACTION_ID = "krita_provenance_export_signed"
+EXPORT_TITLE = "Provenance: Export Signed Image"  # neutral, no "Content Credentials" (spec)
 CAPTURE_TITLE = "Provenance capture"
+FLAT_CHECK_BYTES = 8 * 1024 * 1024  # pixel bytes read at a time when checking a canvas is blank
+NOT_SET_UP = (
+    "signing isn't set up yet; Tools ▸ Scripts ▸ Provenance: Set Up Signing installs the"
+    " packages and makes the local signing certificate"
+)
 _INPUT_EVENTS = frozenset({
     QtCore.QEvent.MouseButtonPress,
     QtCore.QEvent.MouseButtonDblClick,
@@ -66,6 +74,8 @@ class ProvenanceExtension(Extension):
         status.triggered.connect(_show_log_status)
         set_up = window.createAction(SET_UP_ACTION_ID, SET_UP_TITLE, "tools/scripts")
         set_up.triggered.connect(_set_up_signing)
+        export = window.createAction(EXPORT_ACTION_ID, f"{EXPORT_TITLE}…", "tools/scripts")
+        export.triggered.connect(_export_signed)
 
 
 class _Relay(QtCore.QObject):
@@ -115,7 +125,7 @@ def _start_log(document: Document) -> None:
     if document.rootNode() is None:
         return  # no image yet (Krita.createDocument registers first); setAnnotation needs one
     try:
-        ensure_log(document, _observation_gaps())
+        ensure_log(document, opening=True)
     except storage.StorageError as error:
         message = (
             f"{error}\n\nNothing will be recorded in this document, and its log is kept as is."
@@ -368,31 +378,308 @@ def _show_log_status() -> None:
     QtWidgets.QMessageBox.information(_parent(), "Provenance log", text)
 
 
-def ensure_log(
-    document: Document, observation: list[log.Event] | None = None
-) -> tuple[ProvenanceLog, bool]:
+def _export_signed() -> None:
+    """E1, E2, E4 to E6: render the document, sign it with a manifest rebuilt from its log, and
+    log the export. When it can't be signed, the user is told why before choosing where to save,
+    and the file is saved as -unsigned (exporter.py)."""
+    document = Krita.instance().activeDocument()
+    if document is None:
+        QtWidgets.QMessageBox.information(_parent(), EXPORT_TITLE, "Open a document first.")
+        return
+    try:
+        entry, _ = ensure_log(document)
+    except storage.StorageError as error:
+        QtWidgets.QMessageBox.warning(_parent(), EXPORT_TITLE, str(error))
+        return
+
+    signer, unsigned_reason = _signer()
+    if unsigned_reason is None:
+        unsigned_reason = _why_unsignable(entry)
+    if unsigned_reason is not None and not _confirm_unsigned(unsigned_reason):
+        return
+    parent = storage.parent(entry)
+    if (
+        unsigned_reason is None
+        and parent is not None
+        and storage.is_document_file(parent.title)
+        and storage.is_document_file(document.fileName())
+        and document.modified()
+    ):
+        choice = _ask_save_first()  # decision 3 of 13 Oct 2026, second set: never save silently
+        if choice is None:
+            return
+        if choice == "unsigned":
+            unsigned_reason = "you chose to export it unsigned rather than save first"
+        elif not document.save():
+            QtWidgets.QMessageBox.warning(
+                _parent(), EXPORT_TITLE, "Krita couldn't save the document; nothing was exported."
+            )
+            return
+
+    destination = _ask_destination(document)
+    if destination is None:
+        return
+    try:
+        format_ = exporter.format_for(destination)
+    except exporter.ExportError as error:
+        QtWidgets.QMessageBox.warning(_parent(), EXPORT_TITLE, str(error))
+        return
+    parent_data = _parent_data(document, entry) if unsigned_reason is None else None
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="krita-provenance-export-", ignore_cleanup_errors=True
+        ) as temporary:
+            rendered = Path(temporary) / f"render{destination.suffix.lower()}"
+            if not _render(document, rendered):
+                QtWidgets.QMessageBox.warning(
+                    _parent(),
+                    EXPORT_TITLE,
+                    "Krita couldn't render the document; nothing was saved.",
+                )
+                return
+            details = mapping.Export(
+                title=destination.name,
+                format=format_,
+                at=log.now(),
+                krita_version=Krita.instance().version(),
+                layers=_layer_states(document),
+            )
+            outcome = exporter.export(
+                entry,
+                rendered,
+                destination,
+                details,
+                signer,
+                parent_data,
+                unsigned_reason=unsigned_reason,
+            )
+    except OSError as error:
+        QtWidgets.QMessageBox.warning(_parent(), EXPORT_TITLE, f"The export failed: {error}")
+        return
+    text = outcome.to_text(entry)
+    try:
+        append_event(document, outcome.event)  # marks the document modified (decision 3, 16 Oct)
+    except storage.StorageError as error:
+        text += f"\n\nThe export isn't recorded in the document's log: {error}"
+    show = QtWidgets.QMessageBox.information if outcome.signed else QtWidgets.QMessageBox.warning
+    show(_parent(), EXPORT_TITLE, text)
+
+
+def _signer() -> tuple[sdk.SignerConfig | None, str | None]:
+    """The local signing key, activating the plugin's packages first; or why there is none."""
+    try:
+        folder = _data_folder()
+        files = keys.KeyFiles(folder / firstrun.KEYS)
+        if installer.activate(folder) is None or not files.exists():
+            return None, NOT_SET_UP
+        return files.signer_config(), None
+    except (firstrun.FirstRunError, keys.KeysError, OSError) as error:
+        return None, f"the signing key couldn't be read ({error})"
+
+
+def _why_unsignable(entry: ProvenanceLog) -> str | None:
+    """A log the mapping refuses, such as a document that started with content and hasn't been
+    reopened from its saved .kra, is reported before the user picks a file."""
+    probe = mapping.Export(title="probe.png", format="png", at=log.now())
+    try:
+        mapping.manifest(entry, probe)
+    except mapping.MappingError as error:
+        return str(error)
+    return None
+
+
+def _confirm_unsigned(reason: str) -> bool:
+    answer = QtWidgets.QMessageBox.question(
+        _parent(),
+        EXPORT_TITLE,
+        f"This export can't be signed: {reason}\n\nSave an unsigned copy instead? Its name will"
+        " end in -unsigned.",
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
+        QtWidgets.QMessageBox.Cancel,
+    )
+    return answer == QtWidgets.QMessageBox.Yes
+
+
+def _ask_save_first() -> str | None:
+    """ "save", "unsigned", or None to cancel."""
+    box = QtWidgets.QMessageBox(_parent())
+    box.setWindowTitle(EXPORT_TITLE)
+    box.setIcon(QtWidgets.QMessageBox.Question)
+    box.setText(
+        "This document has unsaved changes. A signed export names its saved .kra as the file it"
+        " was opened from, so the .kra has to be saved first. Krita won't save it unless you"
+        " choose to."
+    )
+    save = box.addButton("Save and export signed", QtWidgets.QMessageBox.AcceptRole)
+    unsigned = box.addButton("Export unsigned", QtWidgets.QMessageBox.ActionRole)
+    box.addButton(QtWidgets.QMessageBox.Cancel)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is save:
+        return "save"
+    if clicked is unsigned:
+        return "unsigned"
+    return None
+
+
+def _ask_destination(document: Document) -> Path | None:
+    """Where to save, as PNG or JPEG. The default sits beside the document and never is the
+    document's own file, which may be the image it was opened from."""
+    current = document.fileName()
+    if current:
+        default = Path(current).with_suffix(".png")
+        if default == Path(current):
+            default = default.with_name(f"{default.stem} export.png")
+    else:
+        pictures = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
+        default = Path(pictures) / "untitled.png"
+    chosen, _ = QtWidgets.QFileDialog.getSaveFileName(
+        _parent(), EXPORT_TITLE, str(default), "PNG image (*.png);;JPEG image (*.jpg *.jpeg)"
+    )
+    return Path(chosen) if chosen else None
+
+
+def _parent_data(document: Document, entry: ProvenanceLog) -> bytes | None:
+    """The bytes of the file the document came from, for its parentOf ingredient: the copy kept
+    when an image was opened (decision 1 of 16 Oct 2026), else the document's own file when it
+    is that file. A .kra or .ora counts even if renamed: c2pa-rs records its title and format,
+    not its bytes (CLAUDE.md, "Facts already checked")."""
+    parent = storage.parent(entry)
+    if parent is None:
+        return None
+    if parent.store and parent.store in document.annotationTypes():
+        return bytes(document.annotation(parent.store))
+    current = document.fileName()
+    if not current:
+        return None
+    file = Path(current)
+    both_documents = storage.is_document_file(parent.title) and storage.is_document_file(file.name)
+    if not both_documents and file.name != parent.title:
+        return None
+    try:
+        if file.stat().st_size > exporter.MAX_PARENT_BYTES:
+            return None
+        return file.read_bytes()
+    except OSError:
+        return None
+
+
+def _render(document: Document, path: Path) -> bool:
+    """E1: Krita renders the document to a temporary PNG or JPEG, without option dialogs."""
+    was_batch = document.batchmode()
+    document.setBatchmode(True)
+    try:
+        # libkis takes InfoObject(parent=None); the vendored stub gives it a Window's signature.
+        done = document.exportImage(str(path), InfoObject())  # pyright: ignore[reportCallIssue]
+    finally:
+        document.setBatchmode(was_batch)
+    return bool(done) and path.is_file() and path.stat().st_size > 0
+
+
+def _layer_states(document: Document) -> dict[str, mapping.LayerState]:
+    """Each node's visibility at export, counting hidden groups: the mapping says when the layer
+    that received a generation is gone or hidden (honesty rule 3)."""
+    states: dict[str, mapping.LayerState] = {}
+    root = document.rootNode()
+    pending = [(child, True) for child in root.childNodes()] if root is not None else []
+    while pending:
+        node, parent_visible = pending.pop()
+        visible = parent_visible and node.visible()
+        states[_node_id(node)] = mapping.LayerState(visible)
+        pending.extend((child, visible) for child in node.childNodes())
+    return states
+
+
+def ensure_log(document: Document, *, opening: bool = False) -> tuple[ProvenanceLog, bool]:
     """The document's log, and True if it had none and one was started and written just now.
 
-    ``observation`` is what the log must say as the plugin begins observing the document, such
-    as a capture gap for this session; it is appended and written with the start. Neither is an
-    edit, but Krita marks a document modified whenever an annotation is set
+    A new log starts from the file name (storage.start). An untitled document's canvas is first
+    checked for content (decision 2 of 16 Oct 2026), and an opened image's bytes are kept in
+    their own annotation for signing (decision 1). ``opening`` says Krita has just created or
+    opened the document: then the log also gets what it must say as the plugin begins
+    observing, such as this session's capture gap, or the saved .kra of a document that started
+    with content (storage.observation).
+
+    None of that is an edit, but Krita marks a document modified whenever an annotation is set
     (KisImage::addAnnotation). A document that had no unsaved changes is marked unmodified again,
     so Krita doesn't ask to save a file the user only opened; any later change marks it modified,
     and that save includes the log. Events appended later (append_event) keep Krita's flag.
     """
+    path = document.fileName() or None
     entry = read_log(document)
     created = entry is None
+    copy: bytes | None = None
     if entry is None:
-        entry = storage.start(document.fileName() or None)
-    elif not observation:
+        if storage.keeps_parent_copy(path):
+            copy = _read_parent_file(path)
+        entry = storage.start(
+            path,
+            blank=path is not None or _canvas_is_blank(document),
+            parent_copy=storage.PARENT_COPY if copy is not None else None,
+        )
+    observed: list[log.Event] = []
+    if opening:
+        observed = _observation_gaps() + ([] if created else storage.observation(entry, path))
+    if not created and not observed:
         return entry, False
-    for event in observation or []:
+    for event in observed:
         entry.append(event)
     was_modified = document.modified()
+    if copy is not None:
+        document.setAnnotation(storage.PARENT_COPY, storage.PARENT_COPY_DESCRIPTION, copy)
     write_log(document, entry)
     if not was_modified:
         document.setModified(False)  # pyright: ignore[reportAttributeAccessIssue] (not in the stubs)
     return entry, created
+
+
+def _read_parent_file(path: str | None) -> bytes | None:
+    """The opened image's bytes, to keep in the document (decision 1 of 16 Oct 2026); None when
+    it can't be read or is over storage.MAX_PARENT_COPY, and then signing needs the file."""
+    if not path:
+        return None
+    try:
+        file = Path(path)
+        if file.stat().st_size > storage.MAX_PARENT_COPY:
+            return None
+        return file.read_bytes()
+    except OSError:
+        return None
+
+
+def _canvas_is_blank(document: Document) -> bool:
+    """Decision 2 of 16 Oct 2026: an untitled document is a blank canvas only if every layer is
+    a paint layer that is empty or one flat colour. Pasted content, a template's layers or an
+    image opened as untitled aren't; anything else, a vector layer or a mask, counts as content."""
+    root = document.rootNode()
+    pending = list(root.childNodes()) if root is not None else []
+    while pending:
+        node = pending.pop()
+        kind = node.type()
+        if kind == "":
+            continue  # Krita's own helper nodes, such as the decorations wrapper, have no type
+        if kind == "grouplayer":
+            pending.extend(node.childNodes())
+        elif kind != "paintlayer" or node.childNodes() or not _is_flat(node):
+            return False
+    return True
+
+
+def _is_flat(node: Node) -> bool:
+    """Whether every pixel of a paint layer is the same, read a strip at a time."""
+    rect = node.bounds()
+    if rect.isEmpty():
+        return True
+    x, y, width, height = rect.x(), rect.y(), rect.width(), rect.height()
+    first = bytes(node.pixelData(x, y, 1, 1))
+    if not first:
+        return True
+    rows = max(1, FLAT_CHECK_BYTES // (width * len(first)))
+    for top in range(y, y + height, rows):
+        strip = bytes(node.pixelData(x, top, width, min(rows, y + height - top)))
+        if strip != first * (len(strip) // len(first)):
+            return False
+    return True
 
 
 def append_event(document: Document, event: log.Event) -> None:

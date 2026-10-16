@@ -152,6 +152,25 @@ def test_a_generations_layer_is_never_named_in_the_manifest(name: str):
             assert event.target_layer.name not in text
 
 
+def test_a_document_that_started_with_content_is_refused_until_it_has_its_saved_parent():
+    """Decision 2 of 16 Oct 2026: refused until reopened from a saved .kra; then it maps like an
+    existing document, with the disclosure (golden case started_with_content)."""
+    entry, export, identity = load_case("started_with_content")
+    before = ProvenanceLog(entry.document_id, entry.started, list(entry.events[:1]))
+    with pytest.raises(MappingError, match="close it and open it again"):
+        mapping.manifest(before, export, identity)
+    statement = mapping.ai_use_statement(entry)
+    assert statement.endswith(
+        "The document was created with content already in it; how that content was made is not"
+        " recorded."
+    )
+    result = mapping.manifest(entry, export, identity)
+    actions = result.definition["assertions"][0]["data"]["actions"]
+    assert [a["action"] for a in actions[:2]] == ["c2pa.opened", "c2pa.unknown"]
+    assert "content already in it" in actions[0]["description"]
+    assert result.ingredients[0].format == mapping.KRITA_DOCUMENT
+
+
 def test_a_capture_gap_is_an_unknown_action_without_changes():
     entry, export, identity = load_case("new_document")
     actions = mapping.manifest(entry, export, identity).definition["assertions"][0]["data"][

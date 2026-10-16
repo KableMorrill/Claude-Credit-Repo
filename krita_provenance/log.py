@@ -33,6 +33,10 @@ OPENED_IMAGE = "opened_image"  # opened from an image file, logged as a parentOf
 EXISTING_DOCUMENT = (
     "existing_document"  # had content before the plugin saw it; its .kra is the parent
 )
+# Created untitled with content already in it: pasted, from a template, or a file opened as
+# untitled (decision 2 of 16 Oct 2026). It has no parent until the plugin sees it reopened from
+# a saved .kra or .ora, which logs that file as the parent; it can't be signed before.
+STARTED_WITH_CONTENT = "started_with_content"
 
 # capture_gap.reason (C3)
 PLUGIN_OFF = "plugin_off"
@@ -61,7 +65,7 @@ class LogFormatError(ValueError):
 @dataclass(frozen=True)
 class LogStart:
     at: datetime
-    reason: str  # NEW_DOCUMENT, OPENED_IMAGE or EXISTING_DOCUMENT; others are kept, not mapped
+    reason: str  # NEW_DOCUMENT, OPENED_IMAGE, EXISTING_DOCUMENT or STARTED_WITH_CONTENT
 
 
 @dataclass(frozen=True)

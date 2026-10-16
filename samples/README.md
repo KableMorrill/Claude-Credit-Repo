@@ -11,6 +11,7 @@ Adobe's [Verify](https://verify.contentauthenticity.org) and `c2patool`.
 | `opened_image.jpg` | A photo opened in Krita, three generations, a placed logo | `c2pa.opened` from a `parentOf` ingredient, a hidden and a removed layer disclosed, `c2pa.placed` |
 | `spec_example.png` | The example log from docs/spec.md | created, edited, drawing, placed, unknown, converted |
 | `existing_document.png` | A .kra that had content before the plugin saw it | `c2pa.opened` from the .kra, then `c2pa.unknown` for the unobserved past |
+| `started_with_content.png` | A document created with pasted content, later saved as .kra and reopened | `c2pa.opened` from the saved .kra with the "created with content already in it" disclosure, `c2pa.unknown`, two AI edits |
 
 The pixels are a blank 16x16 image; the histories are the goldens' fictional ones. All are
 signed with the public test certificate in `tests/fixtures/certs`, so every validator should

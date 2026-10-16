@@ -84,6 +84,23 @@ Krita AI Diffusion enabled and connected to its server.
 S3 passes when rows 18 to 20 hold: the plugin catches `result_used`, copies the job's
 parameters and identifies the layer that received the result.
 
+### Signed export (step 7, piece 4; E1, E2, E4 to E6)
+
+Signing set up (rows 12 and 13). Use Tools ▸ Scripts ▸ Provenance: Export Signed Image….
+
+| # | In Krita | Expected |
+| --- | --- | --- |
+| 23 | New document, generate and apply a result, export it as test.png | A save dialog offers PNG and JPEG. Then "Saved and signed: …test.png", "Read back: Valid, with the signer reported as untrusted, as expected for a local certificate.", a manifest label and the AI-use statement. Log Status ends "exported png, signed" |
+| 24 | Upload test.png to Adobe's Verify | Credentials: created with krita-provenance, Krita AI Diffusion as the AI model, edited with AI, the signer unrecognized |
+| 25 | Export the same document as test.jpg | Signed, as in row 23 |
+| 26 | Close the document | Krita asks to save, because recording the export changed the log (decision 3 of 16 Oct 2026) |
+| 27 | Open a PNG or JPEG, apply a generation, save as .kra, close, reopen the .kra, export | Signed: the copy of the opened image kept in the .kra is the parent (decision 1 of 16 Oct 2026). In Verify the credentials list the image it was opened from |
+| 28 | Open an older .kra, paint a stroke, export | A dialog offers "Save and export signed", "Export unsigned" and "Cancel". Export unsigned saves …-unsigned.png with no credentials; Save and export signed saves the .kra, then signs |
+| 29 | Copy an image, File ▸ New ▸ Create from Clipboard, run Log Status, then export | Log Status shows "(started_with_content)". Export says it can't be signed because the document was created with content already in it, and offers an unsigned copy (decision 2 of 16 Oct 2026) |
+| 30 | Save that document as .kra, close it, reopen it, export | Signed. Log Status lists "parentOf: ….kra", added when it was reopened |
+| 31 | File ▸ New with the default white background, run Log Status | "(new_document)": a flat background counts as a blank canvas |
+| 32 | Optional: export a 4000×4000 document and time it | Note the seconds from choosing the file to the result dialog; the M1 target is under 3 seconds of overhead at 4K |
+
 ## Results
 
 | Date | Setup | Rows | Result |
@@ -93,3 +110,4 @@ parameters and identifies the layer that received the result.
 | 14 Oct 2026 | Same | 11, on 0d5c44f | Passes for this plugin. With Krita AI Diffusion enabled Krita still asked to save old-test.kra; with it disabled in the Python Plugin Manager, Krita didn't ask. The remaining prompt is Krita AI Diffusion writing its `ai_diffusion/document_id` into a document it hasn't seen before |
 | 15 Oct 2026 | Same, Krita AI Diffusion enabled | 12–16, on 49c8e53 | All pass. Row 12 named the three packages (91.9 MB), PyPI and `C:\Users\kable\AppData\Roaming\krita\krita-provenance`. Row 13: "Signing is set up.", c2pa-python 0.38.0 with c2pa-rs 0.91.0 loaded in Krita's Python 3.13.5, a certificate and fingerprint, a self-test read back Valid with the signer untrusted, no SSL error and nothing loaded from outside the install. Row 15 showed the same fingerprint after a restart. Row 16's cancel left only the data folder and an empty `downloads` folder. **S1 passes on Windows** |
 | 16 Oct 2026 | Same | 17–22, on 17e5039 | 17 passes. 18 and 19 recorded every apply with its workflow and seed, row 18's result re-applied as an event of its own, but each read "layer not identified": the snapshot came from a timer, which Krita's busy-wait lets fire in mid-apply. Fixed in the next commit; rerun 18 and 19. 20 passes: the three events survived save and reopen. 21: no event, as expected, but the live result looked unchanged, so it's unclear a live result was applied. 22: both applies were ordinary ones (the region was dropped), and their layers were named after the prompt |
+| 16 Oct 2026 | Same | 18–19 rerun, on 2f4c0f7 | Pass: every event names the layer it landed on, including an apply made twice by mistake (two events, two layers) and row 18's result re-applied. **S3 passes.** A layer deleted afterwards keeps its event, by design: at export the manifest says that layer no longer exists and the region may still hold AI content |

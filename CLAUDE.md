@@ -38,18 +38,23 @@ Then the rest of step 7, in this order, each piece committed with the four check
    `keys.ensure(folder / "keys")`, and a self-test that signs a blank PNG and reads it back.
    The report shows the certificate (`KeyFiles.info().to_text()`), or `plan.unavailable` where
    K1 isn't possible. Packages join `sys.path` only when signing needs them, not at startup.
-3. Adapter. **Built 15 Oct 2026; rows 17, 20 and 21 pass, rows 18 and 19 found a C2 bug, fixed
-   16 Oct and awaiting a rerun.** `krita_provenance/adapters/ai_diffusion.py` (the only importer
+3. Adapter. **Done 16 Oct 2026; smoke rows 17 to 21 pass, and S3 with them (rows 18 and 19
+   passed on a rerun after a C2 fix).** `krita_provenance/adapters/ai_diffusion.py` (the only importer
    of `ai_diffusion`, Krita-free) follows every model through `root.models` and
    `root.model_created` rather than `model_for_active_document()`. It connects
    `jobs.result_used` and copies `JobParams` into a `log.GenerationApplied`. `extension.py`
    attaches it once all plugins have loaded, snapshots the active document's node ids at each
    mouse press and key press as C2's "before", appends the event at once, and logs a
    `CaptureGap` on any failure (C3).
-4. Export action: `Document.exportImage` to a temp PNG/JPEG, `mapping.manifest`,
-   `sdk.sign_file`; on `SigningError` save under `sdk.unsigned_name`. For an
-   `existing_document` with unsaved changes show "Save and export signed" / "Export unsigned" /
-   "Cancel" (never save silently). Label it neutrally, no "Content Credentials".
+4. Export action. **Built 16 Oct 2026, waiting on smoke rows 23 to 32.** Tools ▸ Scripts ▸
+   Provenance: Export Signed Image… (neutral label). `extension.py` says first when an export
+   can't be signed and offers an unsigned copy. For a document opened from a .kra with unsaved
+   changes it shows "Save and export signed" / "Export unsigned" / "Cancel"; it never saves
+   silently. It renders with `Document.exportImage` (batch mode, empty `InfoObject`) to a
+   temporary file and collects layer visibility and the parent's bytes. `exporter.export`
+   (Krita-free, tested with real signing) builds the manifest, signs, reads back (E4) or saves
+   `<name>-unsigned.<ext>` with the reason (E6), and returns the `exported` event, which is
+   appended to the log.
 5. Docker (V1) showing `storage.summary` and the events; release zip (I1).
 6. One review at the end, limited to E6 labelling, key creation and storage, the installer
    hash check, and the log never losing events. Budget note: the three adversarial review
@@ -187,10 +192,26 @@ test modules.
   "Rectangle", and the area is the same. (2) Manifests don't name the layer that received a
   generation, since Krita AI Diffusion names it after the prompt; the log keeps the name.
   (3) Piece 3 was pushed (`772bb37`); ask again before pushing later work.
-- **Not done:** the rest of step 7: the export action with the dialog of decision 3, the docker
-  (V1) and the release zip (I1). **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and
-  c2pa-python loads and signs inside Krita; macOS and Linux are unchecked. S3 waits on smoke
-  rows 17 to 20. S5 hasn't run. **S2's Adobe check passes for a
+- **Decisions of 16 Oct 2026, second set**, from the user, for the export action: (1) an
+  opened image's bytes are copied into the document, in the `krita-provenance/ingredient-1`
+  annotation, when the log starts, so a signed export can include its parent even after the
+  document is saved as .kra (up to 256 MB; costs .kra size). (2) An untitled document whose
+  canvas isn't blank when Krita creates it starts as `started_with_content`. It can't be
+  signed until the plugin sees it reopened from a saved .kra, which logs that file as its
+  parent, and then it maps like an existing document. (3) Logging an export marks the document
+  modified, so Krita asks to save on close and the event isn't lost.
+- **Step 7, piece 4 (16 Oct 2026), unverified in Krita:** the export action (handover item 4)
+  and the three decisions above. `_canvas_is_blank` reads each paint layer a strip at a time;
+  any vector layer, mask or other node counts as content. `_parent_data` uses the kept copy,
+  else the document's own file when it is the parent (any .kra or .ora, since c2pa-rs doesn't
+  bind those bytes). Golden case `started_with_content` and `tests/test_exporter.py` cover
+  the Krita-free side. Placed files (componentOf, C6) can't be signed yet and export unsigned.
+- **Not done:** the rest of step 7: the docker (V1) and the release zip (I1), then the review.
+  **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
+  inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
+  S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
+  their actions (created with krita-provenance, Krita AI Diffusion as the AI model, edited
+  with AI). History: **S2's Adobe check passes for a
   minimal manifest** (14 Oct 2026). Adobe's Verify (verify.contentauthenticity.org), which
   answered "Something went wrong" to every upload on 13 Oct, now reads a PNG carrying one
   `c2pa.created` action, signed with our test certificate (the profile `keys.py` makes). It
@@ -205,10 +226,9 @@ test modules.
   reads with c2pa-rs 0.85.2, which can't decode a rectangle's optional `width` and `height`
   (facts, below), even in a file it signed itself. On 16 Oct the user chose polygons:
   `mapping.region` writes each region as its four corners, the goldens and `samples/` were
-  regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. The new
-  `samples/` await an upload to Verify; until Verify reads the full manifests, c2patool and
-  c2pa-python read-back are the verification of record for them.
-  The go/no-go note is due 25 Oct 2026.
+  regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
+  the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
+  25 Oct 2026.
 - **Next:** the rest of step 7 in the handover's order, stopping after each piece that touches
   Krita for the user to test it.
 
@@ -230,6 +250,7 @@ krita_provenance/          the plugin package; Krita pairs it with krita_provena
   installer.py             I2: fetch, verify, unpack, record and activate the pinned wheels
   firstrun.py              I2 + K1 at first run: data folder, consent text, install, keys, self-test
   storage.py               P1: the log as the krita-provenance.json annotation; start reason
+  exporter.py              E1-E6 after rendering: sign under the chosen name or save -unsigned
   adapters/ai_diffusion.py C1-C3: follows Krita AI Diffusion's models; job -> generation_applied
 krita_provenance.desktop   plugin manifest Krita reads at startup
 scripts/dev_install.py     links this checkout into Krita's pykrita folder
@@ -540,17 +561,10 @@ Raise these with the user rather than settling them silently.
 - Without a timestamp, Adobe's Verify shows no date for a file's credentials; with one it shows
   the signing date (14 Oct 2026). Timestamps stay off for v0.1 (decision 6 of the second set);
   this is input for K3 and Q4.
-- An `exported` event (piece 4) is appended to a document that may have no unsaved changes, and
-  the write marks it modified, so Krita will ask to save on close. Keeping that prompt lets the
-  user keep the event; clearing the mark would lose the event when they close without saving.
-  Decide with the user in piece 4.
-- A document with no file name may already have content when Krita creates it: Create from
-  Clipboard, a template, Open existing Document as Untitled, an unnamed autosave recovered.
-  Its log starts as `new_document`, which the mapping turns into `c2pa.created` from an empty
-  canvas, and that is false for it. Not settled; ask the user before the export action
-  (piece 4) ships. One option: at creation, treat the canvas as blank only if every layer is
-  empty or one flat colour, and otherwise use a start reason that the mapping discloses like
-  `existing_document`.
+- Settled 16 Oct 2026 (second set, above): an export keeps Krita's save prompt; an untitled
+  document with content starts as `started_with_content`. An unnamed autosave being recovered
+  still opens under its autosave path, so its log starts as `existing_document` with that file
+  as parent; it isn't claimed blank.
 - Q1 (generation as an action only, or also as an ingredient) waits on S5. Build the action-only
   form, with the choice in one place.
 - A document the plugin first sees after it already has content is decided (decision 2 above),

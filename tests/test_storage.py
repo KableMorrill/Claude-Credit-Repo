@@ -50,6 +50,36 @@ def test_start_reason_follows_the_file_name(file_name, reason, parent):
     assert len(entry.document_id) == 36
 
 
+def test_an_untitled_document_with_content_starts_without_a_parent():
+    """Decision 2 of 16 Oct 2026: pasted, template or opened-as-untitled content isn't a blank
+    canvas, and there is no file to name as its parent yet."""
+    entry = storage.start(None, T0, blank=False)
+    assert entry.started.reason == log.STARTED_WITH_CONTENT and entry.events == []
+    assert storage.start(None, T0, blank=True).started.reason == log.NEW_DOCUMENT
+
+
+def test_an_opened_image_says_where_the_copy_of_its_bytes_is_kept():
+    """Decision 1 of 16 Oct 2026: the glue keeps the opened image's bytes for signing."""
+    entry = storage.start("C:\\Photos\\harbour.png", T0, parent_copy=storage.PARENT_COPY)
+    assert entry.events == [IngredientAdded(T0, log.PARENT_OF, "harbour.png", storage.PARENT_COPY)]
+    assert storage.keeps_parent_copy("C:\\Photos\\harbour.png")
+    assert not storage.keeps_parent_copy("C:\\Art\\harbour.kra")
+    assert not storage.keeps_parent_copy(None) and not storage.keeps_parent_copy("")
+
+
+def test_a_document_that_started_with_content_gets_its_parent_when_reopened_saved():
+    entry = storage.start(None, T0, blank=False)
+    assert storage.observation(entry, None, T0) == []  # still untitled
+    assert storage.observation(entry, "C:\\Art\\study.png", T0) == []  # an image isn't the .kra
+    (added,) = storage.observation(entry, "C:\\Art\\study.kra", T0)
+    assert added == IngredientAdded(T0, log.PARENT_OF, "study.kra")
+    entry.append(added)
+    assert storage.parent(entry) == added
+    assert storage.observation(entry, "C:\\Art\\study copy.kra", T0) == []  # one parent only
+    opened = storage.start("C:\\Art\\old.kra", T0)
+    assert storage.observation(opened, "C:\\Art\\old.kra", T0) == []  # it has its parent
+
+
 def test_summary_names_the_document_and_counts_events():
     entry = storage.start("harbour.kra", T0)
     entry.append(CaptureGap(T0, T0, log.PLUGIN_OFF))

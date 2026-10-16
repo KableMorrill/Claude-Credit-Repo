@@ -6,18 +6,15 @@ for artists who have to disclose AI use, such as on a US copyright application, 
 crowdfunding campaign, and it works alongside
 [Krita AI Diffusion](https://github.com/Acly/krita-ai-diffusion).
 
-> **Status: early development.** Nothing is exported from Krita yet. The plugin loads in Krita,
-> starts a provenance log in each document it sees created or opened, and adds three menu
-> items under Tools ▸ Scripts: Provenance: Check Environment, which reports the Python, Qt,
-> Krita AI Diffusion and c2pa-python versions Krita can see; Provenance: Log Status, which
-> shows the document's log; and Provenance: Set Up Signing, which, after asking, downloads
-> the pinned packages, makes a local signing certificate and signs a test image. With Krita AI
-> Diffusion running, each result applied from its history is recorded in the document's log;
-> live painting, upscaling and control-layer results are not observed yet. The
-> Krita-free core exists and is tested: the log format, scrubbing, the log-to-C2PA mapping,
-> signing with c2pa-python, local signing keys made with cryptography, and the pinned wheel
-> installer, with golden manifests that sign and validate. Capture and signed export inside
-> Krita are planned for v0.1.
+> **Status: early development, heading for v0.1.** The plugin starts a provenance log in each
+> document it sees created or opened. With Krita AI Diffusion running, each result applied
+> from its history is recorded there; live painting, upscaling and control-layer results are
+> not observed yet. Under Tools ▸ Scripts it adds Provenance: Set Up Signing, which, after
+> asking, downloads the pinned packages and makes a local signing certificate, and
+> Provenance: Export Signed Image…, which saves a PNG or JPEG with a signed C2PA manifest
+> built from the log, or a file named -unsigned, with the reason, when it can't sign.
+> Provenance: Log Status shows the log and Provenance: Check Environment the versions Krita
+> can see. The AI-use report and the log docker are still to come.
 
 `krita-provenance` is a working title.
 
