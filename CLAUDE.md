@@ -38,13 +38,14 @@ Then the rest of step 7, in this order, each piece committed with the four check
    `keys.ensure(folder / "keys")`, and a self-test that signs a blank PNG and reads it back.
    The report shows the certificate (`KeyFiles.info().to_text()`), or `plan.unavailable` where
    K1 isn't possible. Packages join `sys.path` only when signing needs them, not at startup.
-3. Adapter. **Built 15 Oct 2026, waiting on smoke rows 17 to 22 (S3).**
-   `krita_provenance/adapters/ai_diffusion.py` (the only importer of `ai_diffusion`, Krita-free)
-   follows every model through `root.models` and `root.model_created` rather than
-   `model_for_active_document()`. It connects `jobs.result_used` and copies `JobParams` into a
-   `log.GenerationApplied`. `extension.py` attaches it once all plugins have loaded, keeps a
-   half-second snapshot of the active document's node ids as C2's "before", appends the event
-   at once, and logs a `CaptureGap` on any failure (C3).
+3. Adapter. **Built 15 Oct 2026; rows 17, 20 and 21 pass, rows 18 and 19 found a C2 bug, fixed
+   16 Oct and awaiting a rerun.** `krita_provenance/adapters/ai_diffusion.py` (the only importer
+   of `ai_diffusion`, Krita-free) follows every model through `root.models` and
+   `root.model_created` rather than `model_for_active_document()`. It connects
+   `jobs.result_used` and copies `JobParams` into a `log.GenerationApplied`. `extension.py`
+   attaches it once all plugins have loaded, snapshots the active document's node ids at each
+   mouse press and key press as C2's "before", appends the event at once, and logs a
+   `CaptureGap` on any failure (C3).
 4. Export action: `Document.exportImage` to a temp PNG/JPEG, `mapping.manifest`,
    `sdk.sign_file`; on `SigningError` save under `sdk.unsigned_name`. For an
    `existing_document` with unsaved changes show "Save and export signed" / "Export unsigned" /
@@ -169,11 +170,23 @@ test modules.
   Krita AI Diffusion runs but can't be followed, a warning says so, and each document observed
   in that session gets `capture_gap` `ai_diffusion_unobserved`, whose statement runs "until
   Krita was closed". Log Status lists the latest events; Check Environment and Log Status show
-  the capture status. Tested with stand-ins shaped like 1.53.0's objects.
+  the capture status. Tested with stand-ins shaped like 1.53.0's objects. In Krita (16 Oct
+  2026): capture works, and rows 17, 20 and 21 pass. Rows 18 and 19 recorded every apply,
+  including a re-applied older result as its own event, but all as "layer not identified".
+  The cause: the snapshot came from a half-second timer, and Krita's busy-wait processes
+  events inside the apply (facts, below), so the timer could fire after the new layer existed.
+  Now the snapshot is taken by an application event filter on mouse and key presses, which
+  Krita doesn't process during the apply, and never while a modal dialog is up. Row 22's two
+  applies were ordinary ones (the region was dropped), and their layers were named.
 - **Decisions of 14 Oct 2026**, from the user: (1) P1's debounce is dropped; every change is
   written at once. (2) Plain-language statements give dates in UTC and say so: "since
   15 October 2026 (UTC)" (`mapping.ai_use_statement`). (3) Pushing to the branch so CI runs is
   approved for these commits; ask again before pushing later work.
+- **Decisions of 16 Oct 2026**, from the user: (1) regions are written as four-corner polygons,
+  not rectangles, so Adobe's Verify (c2pa-rs 0.85.2) can read them; the spec's table says
+  "Rectangle", and the area is the same. (2) Manifests don't name the layer that received a
+  generation, since Krita AI Diffusion names it after the prompt; the log keeps the name.
+  (3) Piece 3 was pushed (`772bb37`); ask again before pushing later work.
 - **Not done:** the rest of step 7: the export action with the dialog of decision 3, the docker
   (V1) and the release zip (I1). **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and
   c2pa-python loads and signs inside Krita; macOS and Linux are unchecked. S3 waits on smoke
@@ -380,8 +393,11 @@ Rely on these; check anything else against source.
   for each LoRA (L324), so S3's question about LoRAs is answered: they're in the metadata.
 - `LayerManager` polls the node tree every 500 ms, and its `create()` registers a new layer at
   once (`self.updated().wrap(node)`), so by `result_used` it already knows the new layer.
-- `eventloop.run` only schedules a task on its own asyncio loop and never processes Qt events,
-  so no Qt timer fires inside `apply_generated_result`.
+- `eventloop.run` only schedules a task on its own asyncio loop and never processes Qt events.
+  But Krita does, inside `apply_generated_result`: creating and removing layers goes through
+  libkis `Node.addChildNode` and `Node.remove`, which wait on the image (Krita 5.3 source,
+  below), and that wait runs `QApplication::processEvents`. So Qt timers can fire in mid-apply,
+  and C2's snapshot can't come from a timer (smoke rows 18 and 19, 16 Oct 2026).
 
 **c2pa-python 0.38.0** (commit `192023c`, bundling c2pa-rs v0.91.0):
 
@@ -478,6 +494,14 @@ methods, so `.connect` on them needs a `pyright: ignore`.
   `importDocument`) returns. libkis `Krita::createDocument` adds it before `newImage`, so a
   script-made document has no image when the signal fires. An autosave being recovered still
   has its autosave path then; Krita renames it afterwards.
+- libkis `Node::addChildNode` and `Node::remove` run a single-command stroke and then
+  `KisImage::waitForDone()`, so the node tree is current when they return. `waitForDone()`
+  calls `KisBusyWaitBroker::notifyWaitOnImageStarted`, whose feedback callback (KisPart.cpp,
+  `busyWaitWithFeedback`) runs `KisDelayedSaveDialog::blockIfImageIsBusy()`. While the image
+  is busy, that loops on `QApplication::processEvents(QEventLoop::ExcludeUserInputEvents)` for
+  up to a second, then shows a modal dialog with its own event loop. So timers and posted
+  events run inside any libkis call that waits on the image; user input doesn't, except in
+  that dialog.
 - `Notifier::setActive(false)` blocks the notifier's signals; it is shared, so the plugin only
   ever sets it active.
 - The PNG exporter writes only the `kpp_version` and `kpp_preset` annotations, and the JPEG

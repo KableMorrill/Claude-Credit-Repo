@@ -16,8 +16,11 @@ through the signals of a QObject made in the GUI thread, so every dialog call ha
 
 Capture (C1 to C3): once every plugin has loaded, the Krita AI Diffusion adapter follows its
 document models. Krita AI Diffusion adds the result's layer before it emits result_used, so C2's
-"before" is a snapshot of the active document's node ids, refreshed every half second by a timer
-that can't fire in the middle of an apply. The layer that appeared since is the target.
+"before" is a snapshot of the active document's node ids, taken at each mouse press and key
+press. An apply only ever follows user input, and Krita handles no user input during it. A timer
+can't be used: libkis waits on the image while inserting the layer, and Krita's busy-wait runs
+QApplication::processEvents meanwhile, so a timer fires in mid-apply (smoke rows 18 and 19,
+16 Oct 2026). The one paint layer that appeared since the snapshot is the target.
 """
 
 import threading
@@ -37,7 +40,11 @@ LOG_STATUS_ACTION_ID = "krita_provenance_log_status"
 SET_UP_ACTION_ID = "krita_provenance_set_up_signing"
 SET_UP_TITLE = "Provenance: Set Up Signing"
 CAPTURE_TITLE = "Provenance capture"
-SNAPSHOT_INTERVAL_MS = 500  # as Krita AI Diffusion polls its own layer list
+_INPUT_EVENTS = frozenset({
+    QtCore.QEvent.MouseButtonPress,
+    QtCore.QEvent.MouseButtonDblClick,
+    QtCore.QEvent.KeyPress,
+})
 
 
 class ProvenanceExtension(Extension):
@@ -68,9 +75,31 @@ class _Relay(QtCore.QObject):
     finished = QtCore.pyqtSignal(object)  # a firstrun.Report, or the exception that stopped it
 
 
+class _InputWatcher(QtCore.QObject):
+    """Takes C2's snapshot as user input arrives, before Krita delivers it. Krita's busy-wait
+    excludes user input, but the dialog it shows after a second of waiting doesn't, so nothing
+    is taken while a modal dialog is up."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._last: object = None  # (event type, timestamp) of the last input that took one
+
+    def eventFilter(self, a0: QtCore.QObject | None, a1: QtCore.QEvent | None) -> bool:
+        if a1 is None or a1.type() not in _INPUT_EVENTS:
+            return False
+        timestamp = getattr(a1, "timestamp", None)  # QInputEvent's, in milliseconds
+        stamp = (a1.type(), timestamp()) if callable(timestamp) else None
+        if (stamp is None or stamp != self._last) and (
+            QtWidgets.QApplication.activeModalWidget() is None
+        ):
+            self._last = stamp  # a press reaches each widget it propagates to; one snapshot
+            _take_snapshot()
+        return False  # never consumes the event
+
+
 _first_run: "tuple[_Relay, QtWidgets.QProgressDialog] | None" = None  # alive while it runs
 _snapshot: "tuple[str, frozenset[str]] | None" = None  # (active document's root id, node ids)
-_poller: "QtCore.QTimer | None" = None
+_input_watcher: _InputWatcher | None = None
 _warned: set[str] = set()  # capture warnings already shown this session
 
 
@@ -113,12 +142,13 @@ def _show_environment() -> None:
 def _attach_adapter() -> None:
     """C1: follow Krita AI Diffusion if Krita loaded it. When it runs but can't be followed, say
     so, and log the gap in every document observed in this session (C3)."""
-    global _poller
+    global _input_watcher
     status = _adapter.attach()
     if status.state == ai_diffusion.ATTACHED:
-        _poller = QtCore.QTimer()
-        _poller.timeout.connect(_take_snapshot)
-        _poller.start(SNAPSHOT_INTERVAL_MS)
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            _input_watcher = _InputWatcher()
+            app.installEventFilter(_input_watcher)
         _take_snapshot()
     elif status.state == ai_diffusion.FAILED:
         for document in Krita.instance().documents():
@@ -135,15 +165,16 @@ def _observation_gaps() -> list[log.Event]:
 
 
 def _take_snapshot() -> None:
-    """C2's "before": the active document's node ids, between applies. It runs from a timer
-    twice a second, so it never raises: a failure leaves no snapshot, and the next apply is
-    logged with its layer unidentified, which the manifest discloses."""
+    """C2's "before": the active document's node ids, taken as user input arrives and after
+    each recorded apply. It runs inside an event filter, so it never raises: a failure leaves no
+    snapshot, and the next apply is logged with its layer unidentified, which the manifest
+    discloses."""
     global _snapshot
     try:
         document = Krita.instance().activeDocument()
         root = document.rootNode() if document is not None else None
-        _snapshot = None if root is None else (_node_id(root), frozenset(_nodes(root)))
-    except Exception:  # noqa: BLE001 - a raising timer slot would show an error every 500 ms
+        _snapshot = None if root is None else (_node_id(root), _node_ids(root))
+    except Exception:  # noqa: BLE001 - an event filter that raised would break input handling
         _snapshot = None
 
 
@@ -206,6 +237,17 @@ def _nodes(root: Node) -> dict[str, tuple[str, str]]:
         found[_node_id(node)] = (node.name(), node.type())
         pending.extend(node.childNodes())
     return found
+
+
+def _node_ids(root: Node) -> frozenset[str]:
+    """The unique ids of every node under the root; cheaper than _nodes, for every input event."""
+    found: set[str] = set()
+    pending = list(root.childNodes())
+    while pending:
+        node = pending.pop()
+        found.add(_node_id(node))
+        pending.extend(node.childNodes())
+    return frozenset(found)
 
 
 def _node_id(node: Node) -> str:
