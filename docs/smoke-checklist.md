@@ -76,7 +76,7 @@ Krita AI Diffusion enabled and connected to its server.
 | --- | --- | --- |
 | 17 | Restart Krita, then Tools ▸ Scripts ▸ Provenance: Check Environment | The last line reads "Generation capture: observing Krita AI Diffusion 1.53.0." and no capture warning appeared at startup |
 | 18 | New document. Generate with Krita AI Diffusion and apply one result (the default puts it on a new layer). Run Log Status | "Events: 1 generation_applied" and "1 AI generation observed by this plugin since … (UTC)". The event line names the workflow (generate), the seed, and "on layer [Generated] … (seed)", the layer that just appeared. No warning dialog |
-| 19 | Select an area, inpaint, apply that result, then apply a second result from the history. Run Log Status | Three generation_applied lines in all, the new two with workflow inpaint, each naming its own new layer |
+| 19 | Select an area, generate with the strength slider at 100% and apply that result. Then click row 18's result in Krita AI Diffusion's history and apply it again. Run Log Status | Three generation_applied lines in all. The second says inpaint (refine_region if the strength was below 100%). The third repeats row 18's workflow and seed: re-applying an older result is a new event, on the new layer it made |
 | 20 | Save as .kra, close, reopen, run Log Status | The same three events after reopening |
 | 21 | Optional, if you use Live: apply a live result | No new event. Krita AI Diffusion 1.53.0 doesn't announce live results (Q10, from its source), so v0.1 doesn't record them |
 | 22 | Optional: two regions, generate, apply | One generation_applied ending "layer not identified": several layers appeared, and which holds what isn't known |
