@@ -203,11 +203,11 @@ test modules.
   carry `changes` with a rectangle region draws "Something went wrong" in Verify: all of
   `samples/`, and regions inside or outside the image alike; region-free actions read. Verify
   reads with c2pa-rs 0.85.2, which can't decode a rectangle's optional `width` and `height`
-  (facts, below), even in a file it signed itself. The same five goldens re-signed with each
-  rectangle written as a four-corner polygon read Valid in c2pa-rs 0.85.1. The user hasn't
-  yet uploaded the polygon files to Verify, and polygons versus rectangles is their call
-  (open questions). Until Verify reads the full manifests, c2patool and c2pa-python read-back
-  are the verification of record for them.
+  (facts, below), even in a file it signed itself. On 16 Oct the user chose polygons:
+  `mapping.region` writes each region as its four corners, the goldens and `samples/` were
+  regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. The new
+  `samples/` await an upload to Verify; until Verify reads the full manifests, c2patool and
+  c2pa-python read-back are the verification of record for them.
   The go/no-go note is due 25 Oct 2026.
 - **Next:** the rest of step 7 in the handover's order, stopping after each piece that touches
   Krita for the user to test it.
@@ -525,22 +525,18 @@ Raise these with the user rather than settling them silently.
   like is the glue's; `installer.install` reports progress per wheel.
 - P1's debounce is dropped (user, 14 Oct 2026): Krita has no before-save signal and
   `imageSaved` fires after the file is written, so every change is written at once.
-- **Prompt text in layer names: fix before the export action ships.** Krita AI Diffusion names
-  the layers it creates after the prompt (facts, above), the log keeps `target_layer.name`, and
-  `mapping._generation` writes "on layer {name}" into the manifest. With real captures that
-  puts prompt text in exports, against the rule to keep it out until D2 and D3. Proposed:
-  manifests stop naming the target layer of a generation (the log keeps the name). Raise with
-  the user, then change the mapping and goldens (`UPDATE_GOLDENS=1`) with piece 4.
+- Prompt text in layer names: settled 16 Oct 2026. Krita AI Diffusion names the layers it
+  creates after the prompt, so manifests no longer name the layer that received a generation;
+  the log keeps the name, and a test checks no golden manifest carries it. Still to watch: C5's
+  `layer_changed` (v1.0) names its layer, which may be one Krita AI Diffusion named.
 - **Results v0.1 doesn't observe** (C7): live painting, upscaling and control-layer images
   reach the document without `result_used`. The manifest can only say what was observed, and
   the README should name these. Capturing upscaling and control layers through
   `jobs.job_finished` is a possible next step.
-- **Rectangles or polygons for regions?** The spec's mapping table says rectangles, and
-  `mapping.rectangle` writes them, but Adobe's Verify can't read a rectangle until it moves to
-  c2pa-web 0.15.0 or later (facts, above). Writing each rectangle as its four corners is the
-  same area, valid C2PA, and readable by every c2pa-rs version tried; the five goldens read
-  that way in c2pa-rs 0.85.1. Changing it is one function plus `UPDATE_GOLDENS=1` and
-  `scripts/make_samples.py`. Ask the user; reporting the Verify dependency upstream is theirs.
+- Regions are polygons (user, 16 Oct 2026), because Adobe's Verify can't read a rectangle until
+  it moves to c2pa-web 0.15.0 or later (facts, above). Reporting that dependency upstream is
+  the user's call. Going back to rectangles later is one function (`mapping.region`) plus
+  `UPDATE_GOLDENS=1` and `scripts/make_samples.py`.
 - Without a timestamp, Adobe's Verify shows no date for a file's credentials; with one it shows
   the signing date (14 Oct 2026). Timestamps stay off for v0.1 (decision 6 of the second set);
   this is input for K3 and Q4.

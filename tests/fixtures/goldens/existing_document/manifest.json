@@ -64,18 +64,34 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 200,
                           "y": 60
                         },
-                        "width": 640,
-                        "height": 360
+                        "vertices": [
+                          {
+                            "x": 200,
+                            "y": 60
+                          },
+                          {
+                            "x": 840,
+                            "y": 60
+                          },
+                          {
+                            "x": 840,
+                            "y": 420
+                          },
+                          {
+                            "x": 200,
+                            "y": 420
+                          }
+                        ]
                       }
                     }
                   ],
-                  "description": "Inpainted region on layer Sky fix (Krita AI Diffusion, inpaint)"
+                  "description": "Inpainted region (Krita AI Diffusion, inpaint)"
                 }
               ]
             },
@@ -92,14 +108,30 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 0,
                           "y": 0
                         },
-                        "width": 1800,
-                        "height": 1200
+                        "vertices": [
+                          {
+                            "x": 0,
+                            "y": 0
+                          },
+                          {
+                            "x": 1800,
+                            "y": 0
+                          },
+                          {
+                            "x": 1800,
+                            "y": 1200
+                          },
+                          {
+                            "x": 0,
+                            "y": 1200
+                          }
+                        ]
                       }
                     }
                   ],

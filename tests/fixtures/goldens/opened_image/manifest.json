@@ -69,18 +69,34 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 0,
                           "y": 0
                         },
-                        "width": 1600,
-                        "height": 1200
+                        "vertices": [
+                          {
+                            "x": 0,
+                            "y": 0
+                          },
+                          {
+                            "x": 1600,
+                            "y": 0
+                          },
+                          {
+                            "x": 1600,
+                            "y": 1200
+                          },
+                          {
+                            "x": 0,
+                            "y": 1200
+                          }
+                        ]
                       }
                     }
                   ],
-                  "description": "Refined region on layer Retouch (Krita AI Diffusion, refine); the layer is hidden at export, but copies or merges of it may remain, so this region may still contain AI-generated content."
+                  "description": "Refined region (Krita AI Diffusion, refine); the layer that received it is hidden at export, but copies or merges of it may remain, so this region may still contain AI-generated content."
                 }
               ]
             },
@@ -103,18 +119,34 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 0,
                           "y": 0
                         },
-                        "width": 1600,
-                        "height": 400
+                        "vertices": [
+                          {
+                            "x": 0,
+                            "y": 0
+                          },
+                          {
+                            "x": 1600,
+                            "y": 0
+                          },
+                          {
+                            "x": 1600,
+                            "y": 400
+                          },
+                          {
+                            "x": 0,
+                            "y": 400
+                          }
+                        ]
                       }
                     }
                   ],
-                  "description": "Generated image on layer Clouds (Krita AI Diffusion, generate); the layer no longer exists at export, so it may have been merged into other layers and this region may still contain AI-generated content."
+                  "description": "Generated image (Krita AI Diffusion, generate); the layer that received it no longer exists at export, so it may have been merged into other layers and this region may still contain AI-generated content."
                 }
               ]
             },
@@ -135,14 +167,30 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 900,
                           "y": 700
                         },
-                        "width": 300,
-                        "height": 200
+                        "vertices": [
+                          {
+                            "x": 900,
+                            "y": 700
+                          },
+                          {
+                            "x": 1200,
+                            "y": 700
+                          },
+                          {
+                            "x": 1200,
+                            "y": 900
+                          },
+                          {
+                            "x": 900,
+                            "y": 900
+                          }
+                        ]
                       }
                     }
                   ],
@@ -168,14 +216,30 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 1400,
                           "y": 1000
                         },
-                        "width": 180,
-                        "height": 180
+                        "vertices": [
+                          {
+                            "x": 1400,
+                            "y": 1000
+                          },
+                          {
+                            "x": 1580,
+                            "y": 1000
+                          },
+                          {
+                            "x": 1580,
+                            "y": 1180
+                          },
+                          {
+                            "x": 1400,
+                            "y": 1180
+                          }
+                        ]
                       }
                     }
                   ],

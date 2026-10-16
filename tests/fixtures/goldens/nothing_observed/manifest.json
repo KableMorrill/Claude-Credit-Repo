@@ -35,14 +35,30 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 120,
                           "y": 80
                         },
-                        "width": 900,
-                        "height": 700
+                        "vertices": [
+                          {
+                            "x": 120,
+                            "y": 80
+                          },
+                          {
+                            "x": 1020,
+                            "y": 80
+                          },
+                          {
+                            "x": 1020,
+                            "y": 780
+                          },
+                          {
+                            "x": 120,
+                            "y": 780
+                          }
+                        ]
                       }
                     }
                   ],

@@ -17,12 +17,12 @@ signed with the public test certificate in `tests/fixtures/certs`, so every vali
 report the signer as unrecognized or untrusted and nothing else. In c2pa-python and c2patool
 0.28.2 the state is `Valid` with `signingCredential.untrusted` as the only failure code.
 
-Adobe's Verify can't read these files yet: it answers "Something went wrong" for all five (15
-Oct 2026). It reads with c2pa-rs 0.85.2, which can't decode the rectangle regions in their
-actions, a bug fixed in c2pa-rs by 0.90.19 (CLAUDE.md, "Older c2pa-rs can't read rectangle
-regions"). Verify reads a manifest without regions signed with the same certificate, and shows
-the signer as unrecognized, as expected. Until it reads these files, c2patool and c2pa-python
-are the validators of record.
+Regions are written as four-corner polygons (decision of 16 Oct 2026). Adobe's Verify reads
+with c2pa-rs 0.85.2, which can't decode rectangle regions, a bug fixed in c2pa-rs by 0.90.19
+(CLAUDE.md, "Older c2pa-rs can't read rectangle regions"). The earlier rectangle samples drew
+"Something went wrong" in Verify; these read Valid in c2pa-rs 0.85.1, with the signer untrusted
+and nothing else, and await an upload to Verify. Until then, c2patool and c2pa-python are the
+validators of record.
 
 Regenerate with `uv run python scripts/make_samples.py` whenever the goldens or the plugin
 version change; `tests/test_samples.py` fails until you do. The version in each manifest is the

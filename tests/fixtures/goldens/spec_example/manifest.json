@@ -55,18 +55,34 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 512,
                           "y": 128
                         },
-                        "width": 768,
-                        "height": 640
+                        "vertices": [
+                          {
+                            "x": 512,
+                            "y": 128
+                          },
+                          {
+                            "x": 1280,
+                            "y": 128
+                          },
+                          {
+                            "x": 1280,
+                            "y": 768
+                          },
+                          {
+                            "x": 512,
+                            "y": 768
+                          }
+                        ]
                       }
                     }
                   ],
-                  "description": "Inpainted region on layer Sky (Krita AI Diffusion, inpaint)"
+                  "description": "Inpainted region (Krita AI Diffusion, inpaint)"
                 }
               ]
             },
@@ -83,14 +99,30 @@
                     {
                       "type": "spatial",
                       "shape": {
-                        "type": "rectangle",
+                        "type": "polygon",
                         "unit": "pixel",
                         "origin": {
                           "x": 0,
                           "y": 0
                         },
-                        "width": 2048,
-                        "height": 2048
+                        "vertices": [
+                          {
+                            "x": 0,
+                            "y": 0
+                          },
+                          {
+                            "x": 2048,
+                            "y": 0
+                          },
+                          {
+                            "x": 2048,
+                            "y": 2048
+                          },
+                          {
+                            "x": 0,
+                            "y": 2048
+                          }
+                        ]
                       }
                     }
                   ],

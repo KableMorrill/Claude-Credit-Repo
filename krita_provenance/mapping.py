@@ -35,6 +35,14 @@ Decisions of 13 Oct 2026 (CLAUDE.md, Where things stand) and open choices kept i
   parameters are the spec example's: model, seed, steps and strength (S5 settles the keys).
 - Earlier ``exported`` events describe other output files and are not actions in this one.
 - Any other ``log_started.reason`` is refused: neither first action would be honest for it.
+
+Decisions of 16 Oct 2026:
+
+- Each region is written as a polygon of its four corners, not as the spec table's rectangle.
+  Adobe's Verify reads with c2pa-rs 0.85.2, which can't decode a rectangle's optional width
+  and height (CLAUDE.md, "Older c2pa-rs can't read rectangle regions"); the area is the same.
+- A generation's description doesn't name the layer that received it: Krita AI Diffusion names
+  the layers it makes after the prompt. The log keeps the name.
 """
 
 from __future__ import annotations
@@ -359,16 +367,18 @@ def gap_statement(gap: CaptureGap) -> str:
     )
 
 
-def rectangle(bounds: Bounds) -> dict[str, Any]:
+def region(bounds: Bounds) -> dict[str, Any]:
+    """A spatial region over x, y, width, height in pixels, written as the polygon of its four
+    corners (decision of 16 Oct 2026, module docstring): no optional floats for old readers."""
     x, y, width, height = bounds
+    corners = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
     return {
         "type": "spatial",
         "shape": {
-            "type": "rectangle",
+            "type": "polygon",
             "unit": "pixel",
             "origin": {"x": x, "y": y},
-            "width": width,
-            "height": height,
+            "vertices": [{"x": cx, "y": cy} for cx, cy in corners],
         },
     }
 
@@ -379,27 +389,28 @@ def _generation(event: GenerationApplied, export: Export) -> dict[str, Any]:
     what = f"{verb} region" if verb != "Generated" else "Generated image"
     how = f"{tool}, {event.job.workflow_kind}"
 
+    # The layer is never named: Krita AI Diffusion names it after the prompt (decision of 16 Oct).
     layer = event.target_layer
     if layer is None:
         description = (
             f"{what} ({how}); the layer that received it could not be identified, so this"
             " AI-generated content may be present anywhere it was moved or merged."
         )
-    elif export.layers is None:
-        description = f"{what} on layer {layer.name} ({how})"
+    elif export.layers is None or (
+        layer.uuid in export.layers and export.layers[layer.uuid].visible
+    ):
+        description = f"{what} ({how})"
     elif layer.uuid not in export.layers:
         description = (
-            f"{what} on layer {layer.name} ({how}); the layer no longer exists at export, so it"
-            " may have been merged into other layers and this region may still contain"
+            f"{what} ({how}); the layer that received it no longer exists at export, so it may"
+            " have been merged into other layers and this region may still contain"
             " AI-generated content."
         )
-    elif not export.layers[layer.uuid].visible:
+    else:
         description = (
-            f"{what} on layer {layer.name} ({how}); the layer is hidden at export, but copies or"
+            f"{what} ({how}); the layer that received it is hidden at export, but copies or"
             " merges of it may remain, so this region may still contain AI-generated content."
         )
-    else:
-        description = f"{what} on layer {layer.name} ({how})"
 
     parameters: dict[str, Any] = {"seed": event.job.seed}
     if event.model.checkpoint is not None:
@@ -458,7 +469,7 @@ def _agent(name: str, version: str | None) -> dict[str, Any]:
 
 
 def _change(bounds: Bounds, description: str) -> dict[str, Any]:
-    return {"region": [rectangle(bounds)], "description": description}
+    return {"region": [region(bounds)], "description": description}
 
 
 def _action(

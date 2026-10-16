@@ -41,7 +41,9 @@ def test_golden_manifest(name: str):
     actual = mapping.manifest(entry, export, identity, plugin_version="0.1.0").to_dict()
     expected_path = GOLDENS / name / "manifest.json"
     if os.environ.get("UPDATE_GOLDENS"):
-        expected_path.write_text(json.dumps(actual, indent=2) + "\n", encoding="utf-8")
+        expected_path.write_text(
+            json.dumps(actual, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )  # LF on Windows too, as .gitattributes stores them
     assert actual == read_json(expected_path)
 
 
@@ -109,12 +111,45 @@ def test_a_generation_maps_to_an_ai_edit_with_its_region_and_without_the_prompt(
     }
     assert edited["changes"] == [
         {
-            "region": [mapping.rectangle((512, 128, 768, 640))],
-            "description": "Inpainted region on layer Sky (Krita AI Diffusion, inpaint)",
+            "region": [mapping.region((512, 128, 768, 640))],
+            "description": "Inpainted region (Krita AI Diffusion, inpaint)",
         }
     ]
     assert "role" not in edited["changes"][0]  # deprecated in C2PA 2.1; c2pa-rs 0.91 rejects it
     assert "prompt" not in json.dumps(edited)
+
+
+def test_regions_are_four_corner_polygons_that_old_readers_can_decode():
+    """Decision of 16 Oct 2026: c2pa-rs up to 0.90.16, Adobe's Verify among its readers, can't
+    decode a rectangle's optional width and height."""
+    assert mapping.region((512, 128, 768, 640)) == {
+        "type": "spatial",
+        "shape": {
+            "type": "polygon",
+            "unit": "pixel",
+            "origin": {"x": 512, "y": 128},
+            "vertices": [
+                {"x": 512, "y": 128},
+                {"x": 1280, "y": 128},
+                {"x": 1280, "y": 768},
+                {"x": 512, "y": 768},
+            ],
+        },
+    }
+    for name in CASES:
+        entry, export, identity = load_case(name)
+        text = json.dumps(mapping.manifest(entry, export, identity).definition)
+        assert '"rectangle"' not in text and '"width"' not in text and '"height"' not in text
+
+
+@pytest.mark.parametrize("name", CASES)
+def test_a_generations_layer_is_never_named_in_the_manifest(name: str):
+    """Decision of 16 Oct 2026: Krita AI Diffusion names a layer after its prompt."""
+    entry, export, identity = load_case(name)
+    text = json.dumps(mapping.manifest(entry, export, identity).definition)
+    for event in entry.events:
+        if isinstance(event, GenerationApplied) and event.target_layer is not None:
+            assert event.target_layer.name not in text
 
 
 def test_a_capture_gap_is_an_unknown_action_without_changes():
@@ -139,11 +174,12 @@ def test_uncertain_attribution_is_disclosed_with_the_reason():
     ]
     descriptions = [a["changes"][0]["description"] for a in actions if a["action"] == "c2pa.edited"]
     assert descriptions[0].startswith(
-        "Refined region on layer Retouch (Krita AI Diffusion, refine); the layer is hidden"
+        "Refined region (Krita AI Diffusion, refine); the layer that received it is hidden"
     )
     assert "may still contain AI-generated content" in descriptions[0]
     assert descriptions[1].startswith(
-        "Generated image on layer Clouds (Krita AI Diffusion, generate); the layer no longer exists"
+        "Generated image (Krita AI Diffusion, generate); the layer that received it no longer"
+        " exists"
     )
     assert "merged" in descriptions[1]
     assert descriptions[2].startswith(
@@ -169,7 +205,7 @@ def test_an_opened_image_is_the_parent_and_a_placed_image_a_component():
     assert actions[0]["parameters"] == {"ingredientIds": [parent.definition["instance_id"]]}
     placed = next(a for a in actions if a["action"] == "c2pa.placed")
     assert placed["parameters"] == {"ingredientIds": [component.definition["instance_id"]]}
-    assert placed["changes"][0]["region"] == [mapping.rectangle((1400, 1000, 180, 180))]
+    assert placed["changes"][0]["region"] == [mapping.region((1400, 1000, 180, 180))]
     assert placed["changes"][0]["description"] == "Placed logo.png on layer Logo"
     assert parent.definition["instance_id"] != component.definition["instance_id"]
     again = mapping.manifest(entry, export, identity)
