@@ -155,9 +155,10 @@ def append(annotation: bytes | None, file_name_: str | None, event: Event) -> by
     return serialize(entry)
 
 
-def summary(entry: ProvenanceLog, latest: int = SUMMARY_EVENTS) -> str:
+def summary(entry: ProvenanceLog, latest: int | None = SUMMARY_EVENTS) -> str:
     """What the Log Status action shows: enough to see that the log survived a save, and what
-    the last few events recorded. Local text: it may show layer names, which can hold prompts."""
+    the last few events recorded. With ``latest`` None it lists every event, oldest first, as
+    the docker's timeline (V1). Local text: it may show layer names, which can hold prompts."""
     kinds: dict[str, int] = {}
     for event in entry.events:
         kinds[log.event_type(event)] = kinds.get(log.event_type(event), 0) + 1
@@ -169,7 +170,8 @@ def summary(entry: ProvenanceLog, latest: int = SUMMARY_EVENTS) -> str:
         ai_use_statement(entry),
     ]
     if entry.events:
-        shown = entry.events[-latest:]
+        count = len(entry.events)
+        shown = entry.events[count - min(count, latest) :] if latest is not None else entry.events
         heading = "Latest events:" if len(shown) < len(entry.events) else "Events, oldest first:"
         lines += ["", heading, *(event_line(event) for event in shown)]
     return "\n".join(lines)

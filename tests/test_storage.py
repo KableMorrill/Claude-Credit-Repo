@@ -124,6 +124,17 @@ def test_summary_lists_the_latest_events_one_per_line():
     assert many[5] == "Latest events:" and len(many) == 8
 
 
+def test_summary_lists_every_event_for_the_docker():
+    entry = storage.start(None, T0)
+    gaps = [CaptureGap(T0, T0, log.ADAPTER_ERROR) for _ in range(storage.SUMMARY_EVENTS + 2)]
+    for gap in gaps:
+        entry.append(gap)
+    assert storage.summary(entry).splitlines()[5] == "Latest events:"
+    lines = storage.summary(entry, latest=None).splitlines()
+    assert lines[5] == "Events, oldest first:"
+    assert lines[6:] == [storage.event_line(gap) for gap in gaps]
+
+
 def test_append_keeps_every_past_event_and_adds_one_at_the_end():
     entry = storage.start("harbour.png", T0)
     entry.append(log.UnknownEvent("from_a_newer_version", {"type": "from_a_newer_version", "x": 1}))

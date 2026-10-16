@@ -43,6 +43,10 @@ class Outcome:
     event: Exported  # for the document's log
 
     def to_text(self, entry: ProvenanceLog) -> str:
+        return f"{self.result_text()}\n\n{mapping.ai_use_statement(entry)}"
+
+    def result_text(self) -> str:
+        """Where the image went and whether it is signed, without the AI-use statement."""
         if self.signed and self.validation is not None:
             untrusted = (
                 ", with the signer reported as untrusted, as expected for a local certificate"
@@ -67,7 +71,7 @@ class Outcome:
                     " left as it was."
                 ),
             ]
-        return "\n".join([*lines, "", mapping.ai_use_statement(entry)])
+        return "\n".join(lines)
 
 
 def format_for(path: Path) -> str:

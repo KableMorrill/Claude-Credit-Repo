@@ -21,6 +21,10 @@ press. An apply only ever follows user input, and Krita handles no user input du
 can't be used: libkis waits on the image while inserting the layer, and Krita's busy-wait runs
 QApplication::processEvents meanwhile, so a timer fires in mid-apply (smoke rows 18 and 19,
 16 Oct 2026). The one paint layer that appeared since the snapshot is the target.
+
+The docker (V1) shows the log of the document in its window's active view, as plain text. It
+reads the log on its own timer after its view changes or any log is written, never inside the
+Krita call that caused the change.
 """
 
 import tempfile
@@ -28,7 +32,18 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from krita import Document, Extension, InfoObject, Krita, Node, Window
+from krita import (
+    Canvas,
+    DockWidget,
+    DockWidgetFactory,  # pyright: ignore[reportAttributeAccessIssue] (not in the stubs)
+    DockWidgetFactoryBase,
+    Document,
+    Extension,
+    InfoObject,
+    Krita,
+    Node,
+    Window,
+)
 
 from . import exporter, firstrun, installer, keys, log, mapping, sdk, storage
 from .adapters import ai_diffusion
@@ -43,6 +58,8 @@ SET_UP_TITLE = "Provenance: Set Up Signing"
 EXPORT_ACTION_ID = "krita_provenance_export_signed"
 EXPORT_TITLE = "Provenance: Export Signed Image"  # neutral, no "Content Credentials" (spec)
 CAPTURE_TITLE = "Provenance capture"
+DOCKER_ID = "krita_provenance_log"
+DOCKER_TITLE = "Provenance Log"  # neutral, like the export action's label
 FLAT_CHECK_BYTES = 8 * 1024 * 1024  # pixel bytes read at a time when checking a canvas is blank
 NOT_SET_UP = (
     "signing isn't set up yet; Tools ▸ Scripts ▸ Provenance: Set Up Signing installs the"
@@ -107,10 +124,61 @@ class _InputWatcher(QtCore.QObject):
         return False  # never consumes the event
 
 
+class _Changes(QtCore.QObject):
+    """Tells the dockers that a log was written or the capture status changed."""
+
+    changed = QtCore.pyqtSignal()
+
+
+class _LogDocker(DockWidget):
+    """V1: the log of the document in this window's active view, as a timeline of what the
+    plugin recorded. Plain text only: layer names can hold prompts, never to be read as markup.
+
+    Changes only start its timer. unsetCanvas deletes the old canvas after canvasChanged
+    returns, and a log is written inside Krita's open or Krita AI Diffusion's apply; the timer
+    reads once those are over. It finds its document through its canvas each time and keeps no
+    wrapper."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle(DOCKER_TITLE)
+        self._text = QtWidgets.QPlainTextEdit(self)
+        self._text.setReadOnly(True)
+        self.setWidget(self._text)
+        self._shown: str | None = None  # the log shown, to keep the scroll position within it
+        self._timer = QtCore.QTimer(self)  # a child, so no read outlives the docker
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._refresh)
+        if _changes is not None:
+            _changes.changed.connect(self._timer.start)
+        self._timer.start()
+
+    def canvasChanged(self, canvas: Canvas) -> None:
+        self._timer.start()
+
+    def _refresh(self) -> None:
+        try:
+            canvas = self.canvas()
+            view = canvas.view() if canvas is not None else None
+            shown, text = _docker_text(view.document() if view is not None else None)
+        except Exception as error:  # noqa: BLE001 - a raising slot would show an error dialog each time
+            shown, text = None, f"The log can't be shown: {error}"
+        if text == self._text.toPlainText():
+            return
+        bar = self._text.verticalScrollBar()
+        position = bar.value() if bar is not None and shown == self._shown else 0
+        self._text.setPlainText(text)
+        if bar is not None:
+            bar.setValue(position)
+        self._shown = shown
+
+
 _first_run: "tuple[_Relay, QtWidgets.QProgressDialog] | None" = None  # alive while it runs
 _snapshot: "tuple[str, frozenset[str]] | None" = None  # (active document's root id, node ids)
 _input_watcher: _InputWatcher | None = None
 _warned: set[str] = set()  # capture warnings already shown this session
+_changes: _Changes | None = None  # made in register(), before any docker
+_last_export: dict[str, str] = {}  # log document id -> the result of its last export this session
 
 
 def _parent() -> QtWidgets.QWidget | None:
@@ -164,6 +232,7 @@ def _attach_adapter() -> None:
         for document in Krita.instance().documents():
             _start_log(document)  # documents opened before this ran get the gap too
         QtWidgets.QMessageBox.warning(_parent(), CAPTURE_TITLE, status.to_text())
+    _notify_dockers()  # they show the capture status
 
 
 def _observation_gaps() -> list[log.Event]:
@@ -378,6 +447,34 @@ def _show_log_status() -> None:
     QtWidgets.QMessageBox.information(_parent(), "Provenance log", text)
 
 
+def _docker_text(document: Document | None) -> tuple[str | None, str]:
+    """V1: the docker's text for a document, with every event, and the id of the log shown."""
+    if document is None:
+        return None, "No document is open."
+    try:
+        entry = read_log(document)
+    except storage.StorageError as error:
+        return None, (
+            f"{error}\n\nNothing will be recorded in this document, and its log is kept as is."
+        )
+    if entry is None:
+        return None, (
+            "This document has no provenance log yet. Tools ▸ Scripts ▸ Provenance: Log Status"
+            " starts one."
+        )
+    parts = [storage.summary(entry, latest=None)]
+    last = _last_export.get(entry.document_id)
+    if last is not None:
+        parts.append(f"Last export in this session:\n{last}")  # E4's read-back (spec: Architecture)
+    parts.append(_adapter.status.to_text())
+    return entry.document_id, "\n\n".join(parts)
+
+
+def _notify_dockers() -> None:
+    if _changes is not None:
+        _changes.changed.emit()
+
+
 def _export_signed() -> None:
     """E1, E2, E4 to E6: render the document, sign it with a manifest rebuilt from its log, and
     log the export. When it can't be signed, the user is told why before choosing where to save,
@@ -457,6 +554,7 @@ def _export_signed() -> None:
         QtWidgets.QMessageBox.warning(_parent(), EXPORT_TITLE, f"The export failed: {error}")
         return
     text = outcome.to_text(entry)
+    _last_export[entry.document_id] = outcome.result_text()
     try:
         append_event(document, outcome.event)  # marks the document modified (decision 3, 16 Oct)
     except storage.StorageError as error:
@@ -687,6 +785,7 @@ def append_event(document: Document, event: log.Event) -> None:
     marks the document modified, so closing it asks to save, and the save keeps the event."""
     data = storage.append(_annotation(document), document.fileName() or None, event)
     document.setAnnotation(ANNOTATION, storage.DESCRIPTION, data)
+    _notify_dockers()
 
 
 def read_log(document: Document):
@@ -703,8 +802,14 @@ def write_log(document: Document, entry) -> None:
     """The document must have an image: Krita 5.3's setAnnotation uses it without a check. The
     write marks the document modified."""
     document.setAnnotation(ANNOTATION, storage.DESCRIPTION, storage.serialize(entry))
+    _notify_dockers()
 
 
 def register() -> None:
+    global _changes
     app = Krita.instance()
+    _changes = _Changes()
     app.addExtension(ProvenanceExtension(app))
+    # V1: one docker per window, listed under Settings ▸ Dockers. The stubs lack the enum.
+    right = DockWidgetFactoryBase.DockRight  # pyright: ignore[reportAttributeAccessIssue]
+    app.addDockWidgetFactory(DockWidgetFactory(DOCKER_ID, right, _LogDocker))

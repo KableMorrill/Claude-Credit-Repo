@@ -14,7 +14,8 @@ crowdfunding campaign, and it works alongside
 > Provenance: Export Signed Image…, which saves a PNG or JPEG with a signed C2PA manifest
 > built from the log, or a file named -unsigned, with the reason, when it can't sign.
 > Provenance: Log Status shows the log and Provenance: Check Environment the versions Krita
-> can see. The AI-use report and the log docker are still to come.
+> can see. The Provenance Log docker (Settings ▸ Dockers) shows the active document's log as
+> it grows. The AI-use report is still to come.
 
 `krita-provenance` is a working title.
 
@@ -72,7 +73,14 @@ uv run python scripts/dev_install.py
 
 On Windows without Developer Mode, this makes a directory junction instead of a symlink. If you
 moved Krita's resource folder, pass `--pykrita <folder>`. Run it again with `--remove` before
-installing a release zip, so the zip doesn't land in your checkout.
+installing a release zip: Krita's importer replaces the plugin folder it installs into, and the
+dev link points at your checkout.
+
+To build the zip that Krita installs with Tools ▸ Scripts ▸ Import Python Plugin from File:
+
+```sh
+uv run python scripts/build_release.py   # dist/krita-provenance-<version>.zip
+```
 
 ### Layout rules
 

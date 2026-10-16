@@ -143,3 +143,4 @@ def test_the_report_says_what_was_signed_and_what_was_observed(tmp_path: Path, s
     assert text.startswith(f"Saved and signed: {tmp_path / 'a.png'}")
     assert "untrusted, as expected for a local certificate" in text
     assert "No AI generation observed by this plugin since" in text
+    assert text == f"{outcome.result_text()}\n\n{mapping.ai_use_statement(entry)}"  # the docker's
