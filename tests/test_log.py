@@ -114,12 +114,25 @@ def test_json_is_the_spec_format():
 
 
 def test_an_export_logged_before_read_back_existed_writes_back_as_it_was():
-    data = json.loads((GOLDENS / "spec_example" / "log.json").read_text(encoding="utf-8"))
-    exported = data["events"][-1]
-    assert exported["type"] == "exported" and "read_back" not in exported
-    restored = ProvenanceLog.from_json(json.dumps(data))
-    assert isinstance(restored.events[-1], Exported) and restored.events[-1].read_back is None
-    assert json.loads(restored.to_json())["events"][-1] == exported
+    older = {
+        "type": "exported",
+        "at": "2026-10-16T16:45:10Z",
+        "format": "png",
+        "disclosure": "standard",
+        "manifest_label": "urn:c2pa:0f6e1d2c",
+    }
+    event = log.event_from_dict(older)
+    assert isinstance(event, Exported) and event.read_back is None
+    assert log.event_to_dict(event) == older
+
+
+def test_the_spec_examples_export_keeps_its_read_back():
+    entry = ProvenanceLog.from_json(
+        (GOLDENS / "spec_example" / "log.json").read_text(encoding="utf-8")
+    )
+    exported = entry.events[-1]
+    assert isinstance(exported, Exported)
+    assert exported.read_back == ReadBack("Valid", ("signingCredential.untrusted",))
 
 
 def test_reads_the_spec_example():

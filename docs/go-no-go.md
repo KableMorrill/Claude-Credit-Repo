@@ -17,7 +17,7 @@ M0's exit gate: each spike passes or has a written workaround.
 | S2 | Does the SDK accept a locally made root CA and signing certificate, and does Adobe's Verify show the signer as unrecognized? | **Passes** (14 to 16 Oct). Verify reads full manifests once regions are written as polygons: it runs c2pa-rs 0.85.2, which can't read rectangles |
 | S3 | Can a separate plugin catch Krita AI Diffusion's `result_used`, copy the job's parameters and find the layer that received the result? | **Passes** (16 Oct), once the "before" snapshot of the layers was taken at user input instead of from a timer |
 | S4 | Does a custom annotation survive save and reopen beside Krita AI Diffusion's `ui.json`? | **Passes** (13 Oct) |
-| S5 | How do a Firefly image and a Photoshop Generative Fill export record AI use (Q1)? | **Not run**: it needs those two files (workaround below) |
+| S5 | How do a Firefly image and a Photoshop Generative Fill export record AI use (Q1)? | **In progress** (18 Oct). The first file, made in Firefly with Google's Gemini Flash partner model, carries only Google's manifest: the image is `c2pa.created` with `trainedAlgorithmicMedia`, its input an `inputTo` ingredient with no content, and the SynthID watermark a `c2pa.edited` action. An export from Krita with that image as its parent keeps Google's manifest beneath ours and validates. Still needed: an image from Adobe's own Firefly model, and an Adobe fill edit, which is what Q1 turns on (workaround below) |
 
 ### Workarounds
 
@@ -31,7 +31,10 @@ M0's exit gate: each spike passes or has a written workaround.
   `compositeWithTrainedAlgorithmicMedia` alone, the form the spec builds first, and the choice
   sits in one place in `mapping.py`. Manifests are rebuilt from the log at every export. If S5
   shows that generations should also be `componentOf` ingredients, documents logged before the
-  change get the new form at their next export.
+  change get the new form at their next export. No public Generative Fill sample turned up (the
+  C2PA public test files hold Adobe's synthetic 2022 samples and camera images). Without a
+  Photoshop subscription, an edit with Firefly's own Generative Fill is the nearest Adobe
+  example.
 
 ## M1, already built
 

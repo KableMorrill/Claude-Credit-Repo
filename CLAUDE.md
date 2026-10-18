@@ -262,8 +262,8 @@ test modules.
     open until then, and a declined save prompt discards new events with everything else
     (smoke row 37).
 - **Results, 18 Oct 2026:** smoke row 42 passes (a script-made document starts as
-  `started_with_content`). Row 41's export ran in a Krita session started before decision 1
-  reached the checkout, so it needs a rerun. Row 37's missing events came from closing row 30's
+  `started_with_content`). Row 41 passes on a rerun; its first export ran in a Krita session
+  started before decision 1 reached the checkout. Row 37's missing events came from closing row 30's
   document without saving: the user had taken the save prompts for Krita AI Diffusion's. The
   prompt after an export is this plugin's (decision 3 of 16 Oct). **M1's c2patool gate item is
   met:** c2patool 0.27.22 (GitHub's Windows build, SHA-256 checked, run from the scratchpad, not
@@ -273,9 +273,20 @@ test modules.
   or older plugin versions is needed while this is a dev build only the user runs; settle the
   open question about unknown fields closer to a release. (2) `ecb48ab` and `c31ab29` were
   pushed; ask again before pushing later work.
+- **Decisions of 18 Oct 2026, third set**, from the user: (1) the export result doesn't add
+  "save to keep this export in the log": clutter, since anyone who wants the record saves
+  their work. (2) docs/spec.md's log example now shows `read_back`, at the user's request, and
+  the `spec_example` golden log matches it (its manifest is unchanged). (3) `fe60895` was
+  pushed; ask again before pushing later work.
+- **S5, in progress (18 Oct 2026):** the user has no Adobe subscription. No public Generative
+  Fill sample turned up: the C2PA public test files hold Adobe's synthetic 2022 samples and
+  Nikon and Truepic camera images, and searches found no published Generative Fill manifest.
+  The user's first Firefly file came from Google's Gemini Flash partner model and is Google's
+  work (facts, below). Asked of the user: an image from Adobe's own Firefly model, and an edit
+  with Firefly's own Generative Fill, ideally of a signed Krita export.
 - **Go/no-go note:** drafted in [docs/go-no-go.md](docs/go-no-go.md) on 18 Oct 2026; final
   once S5 runs. Recommendation: go.
-- **Not done:** smoke row 41's rerun; S5 (needs the user's Firefly and Photoshop files).
+- **Not done:** S5 (above).
   **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
   inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
   S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
@@ -298,10 +309,10 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** row 41's rerun; S5 once the user supplies a Firefly image and a Photoshop
-  Generative Fill export (dump both, compare with ours, decide Q1, finish the go/no-go note);
-  S1 on macOS and Linux if the user has those machines; the Krita AI Diffusion issue with a
-  demo (the user opens it; Claude may draft it).
+- **Next:** S5 once the user has the Adobe files (dump them with c2patool, compare with ours,
+  bring the user the Q1 choice, finish the go/no-go note); the user's answer on the
+  opened-image statement (open questions); S1 on macOS and Linux if the user has those
+  machines; the Krita AI Diffusion issue with a demo (the user opens it; Claude may draft it).
 
 ## Layout
 
@@ -612,6 +623,23 @@ methods, so `.connect` on them needs a `pyright: ignore`.
   no view. `DockWidgetFactory(id, position, cls)` is Python (`krita/dockwidgetfactory.py`);
   neither it nor the `DockPosition` enum is in our stubs.
 
+**Images from other generators** (18 Oct 2026, c2patool 0.27.22 and c2pa-python 0.38.0; the
+user's file, kept out of the repo):
+
+- A Firefly download made with Google's Gemini Flash partner model holds one manifest,
+  Google's: "Google C2PA Core Generator Library", claim v2, signed by Google LLC as "Google
+  Media Processing Services", with a Google timestamp. Its actions are `c2pa.created` with
+  `trainedAlgorithmicMedia` ("Created by Google Generative AI."), citing an `inputTo`
+  ingredient holding only a description ("Input ingredient 0"), then `c2pa.edited` with
+  `trainedAlgorithmicMedia` ("Applied imperceptible SynthID watermark."). Its XMP says the
+  same in IPTC terms (DigitalSourceType `trainedAlgorithmicMedia`, credit "Made with Google
+  AI"). Nothing in the file is Adobe's, and nothing links to a manifest elsewhere. c2patool's
+  default trust settings report Google's signer as untrusted.
+- An export with that file as its `parentOf` ingredient (a scratch run with the test
+  certificate) validates with only our untrusted signer, and the store keeps Google's manifest
+  as the parent's, beneath ours; c2pa-python and c2patool agree. An opened image that carries
+  credentials keeps them through an export from Krita, even in v0.1.
+
 **Windows paths** (14 Oct 2026): unpacking cryptography failed with "No such file or
 directory" when the data folder sat about 150 characters deep, because a staged file's path
 passed 260 characters. `installer.write_failure` now names the limit. The real data folder
@@ -657,6 +685,12 @@ Raise these with the user rather than settling them silently.
   only unknown event types survive whole (`log.UnknownEvent`). `read_back` (18 Oct 2026) is
   the first added field. The user deferred this until closer to a release (18 Oct 2026): then
   decide whether known events keep unknown fields, so fields added later survive older readers.
+- Asked of the user 18 Oct 2026: the plain-language statement gives existing and pasted
+  documents a note about what came before the log, but an opened image none, so a document
+  begun from an AI image reads "No AI generation observed by this plugin since …" alone (its
+  manifest does carry the image's own credentials). Proposed addition for `opened_image`: "The
+  document began as an image opened from a file; how that image was made is not recorded by
+  this plugin." One string in `mapping.ai_use_statement`.
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 

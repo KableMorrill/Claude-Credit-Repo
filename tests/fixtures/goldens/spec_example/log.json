@@ -20,6 +20,7 @@
      "title": "background.png", "store": "krita-provenance/ingredient-1", "validation": "valid"},
     {"type": "capture_gap", "from": "2026-11-02T18:40:00Z", "to": "2026-11-02T18:52:17Z", "reason": "adapter_error"},
     {"type": "exported", "at": "2026-11-02T19:00:00Z", "format": "png", "disclosure": "standard",
-     "manifest_label": "urn:c2pa:0f6e1d2c-3b4a-4596-8778-99aabbccddee"}
+     "manifest_label": "urn:c2pa:0f6e1d2c-3b4a-4596-8778-99aabbccddee",
+     "read_back": {"state": "Valid", "failures": ["signingCredential.untrusted"]}}
   ]
 }

@@ -151,7 +151,8 @@ The log is the system of record: an append-only event list stored as JSON in the
      "title": "background.png", "store": "krita-provenance/ingredient-1", "validation": "valid"},
     {"type": "capture_gap", "from": "…", "to": "…", "reason": "adapter_error"},
     {"type": "exported", "at": "…", "format": "png", "disclosure": "standard",
-     "manifest_label": "urn:c2pa:…"}
+     "manifest_label": "urn:c2pa:…",
+     "read_back": {"state": "Valid", "failures": ["signingCredential.untrusted"]}}
   ]
 }
 ```
@@ -161,6 +162,7 @@ The log is the system of record: an append-only event list stored as JSON in the
 - The annotation is named `krita-provenance.json`. Krita AI Diffusion uses `ui.json` and `result{n}.webp` ([persistence.py](https://github.com/Acly/krita-ai-diffusion/blob/main/ai_diffusion/persistence.py)), so names don't clash.
 - Krita's Document API provides `annotation`, `setAnnotation`, `annotationTypes` and `removeAnnotation` for this ([Document API](https://api.kde.org/krita/html/classDocument.html)).
 - Full prompts stay in the .kra; the disclosure level decides what leaves it.
+- `read_back` keeps what reading a signed export back reported (E4): the SDK's validation state and failure codes. An unsigned export has none. It stays in the log and isn't written into manifests.
 
 ## C2PA mapping
 
