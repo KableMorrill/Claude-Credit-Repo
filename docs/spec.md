@@ -2,7 +2,7 @@
 
 Oct 12, 2026 · @Kable
 
-> **Snapshot.** Exported from the project's Claude Doc on 12 Oct 2026 (revision 21) so it can be read in this repo. The text is unchanged; the two diagrams, which the export drops, are redrawn below in Mermaid. Progress since then is tracked in [CLAUDE.md](../CLAUDE.md), not here. Live doc (owner only): https://claude.ai/code/artifact/53eb2ecb-ab02-4e17-9c40-1e93e9c4d521
+> **Snapshot.** Exported from the project's Claude Doc on 12 Oct 2026 (revision 21) so it can be read in this repo. The text is unchanged except where the owner asked on 18 Oct 2026: the log example shows `read_back`, and Q1 and the finished items under "This week" are ticked. The two diagrams, which the export drops, are redrawn below in Mermaid. Progress is otherwise tracked in [CLAUDE.md](../CLAUDE.md), not here. Live doc (owner only): https://claude.ai/code/artifact/53eb2ecb-ab02-4e17-9c40-1e93e9c4d521
 
 Build an open-source Krita plugin that records each AI generation and layer edit in a document, then exports a signed C2PA manifest. Its users are artists who must disclose AI use; it doubles as a portfolio piece for provenance engineering roles. Spikes run to Oct 25, 2026, v1.0 ships by Jan 17, 2027, and stretch work ends mid-February 2027.
 
@@ -365,9 +365,9 @@ The biggest risk is Krita AI Diffusion changing its internals; the version-check
 
 ## Open questions
 
-Ten decisions remain open; spike S5 settles Q1, and the rest should close before M2 starts. Q2 is settled.
+Nine decisions remain open and should close before M2 starts. Q1 and Q2 are settled.
 
-- [ ] Q1 Generations: keep `c2pa.edited` with `compositeWithTrainedAlgorithmicMedia` alone, or also attach each result as a `componentOf` ingredient with its own `trainedAlgorithmicMedia` manifest? Compare a Photoshop Generative Fill export (S5).
+- [x] Q1 Settled by spike S5 (18 Oct 2026): keep `c2pa.edited` with `compositeWithTrainedAlgorithmicMedia` alone, as Adobe Firefly records its Generative Fill and prompt edits; no `componentOf` ingredient per result.
 - [x] Q2 Settled from c2pa-rs: `c2pa.drawing` covers brush and eraser changes, and `empty` marks a blank canvas.
 - [ ] Q3 Default disclosure level: standard (proposed) or minimal?
 - [ ] Q4 Timestamps: on by default for longer-lived signatures, or off to avoid a network call?
@@ -383,15 +383,15 @@ Ten decisions remain open; spike S5 settles Q1, and the rest should close before
 
 This week sets up the toolchain and starts the five spikes; the go/no-go note is due Oct 25, 2026.
 
-- [ ] Install Krita 5.3 and Krita AI Diffusion 1.53.0 with the local managed server.
-- [ ] Create the repo: plugin package and `.desktop` file, ruff, pyright with Krita stubs (Krita AI Diffusion keeps its stubs in `scripts/typeshed`), pytest and CI.
-- [ ] In a virtualenv, install c2pa-python 0.38.0, run its `sign.py` and `read.py` examples, and install c2patool.
+- [x] Install Krita 5.3 and Krita AI Diffusion 1.53.0 with the local managed server.
+- [x] Create the repo: plugin package and `.desktop` file, ruff, pyright with Krita stubs (Krita AI Diffusion keeps its stubs in `scripts/typeshed`), pytest and CI.
+- [x] In a virtualenv, install c2pa-python 0.38.0, run its `sign.py` and `read.py` examples, and install c2patool.
 - [ ] S1: load c2pa-python inside Krita on each OS, confirm the embedded Python is 3.10 or newer, and sign a PNG from the Scripter.
-- [ ] S2: generate a local root CA and an end-entity certificate the SDK accepts; check that Adobe's Verify shows "Unrecognized".
-- [ ] S3: from a separate plugin, catch `result_used`, copy the job's `params` and identify the target layer.
-- [ ] S4: write and read a custom annotation; confirm it survives save and reopen beside `ui.json`.
-- [ ] S5: dump a Firefly image and a Photoshop Generative Fill export with c2patool; decide Q1.
-- [ ] Write the go/no-go note.
+- [x] S2: generate a local root CA and an end-entity certificate the SDK accepts; check that Adobe's Verify shows "Unrecognized".
+- [x] S3: from a separate plugin, catch `result_used`, copy the job's `params` and identify the target layer.
+- [x] S4: write and read a custom annotation; confirm it survives save and reopen beside `ui.json`.
+- [x] S5: dump a Firefly image and a Photoshop Generative Fill export with c2patool; decide Q1.
+- [x] Write the go/no-go note.
 
 ## Sources
 
