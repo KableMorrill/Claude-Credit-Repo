@@ -5,15 +5,19 @@ Spec: Testing and validation; E4, E5, E6. These tests need c2pa-python, a dev de
 
 from __future__ import annotations
 
+import http.server
 import json
 import stat
+import struct
 import sys
+import threading
+import zlib
 from pathlib import Path
 
 import pytest
 
 from goldens import CASES, GOLDENS, comparable, load_case, read_actions
-from krita_provenance import mapping, sdk
+from krita_provenance import log, mapping, sdk, storage
 from krita_provenance.mapping import Manifest
 from krita_provenance.sdk import IngredientData, ReadError, SignerConfig, SigningError
 
@@ -157,6 +161,62 @@ def test_a_signed_file_that_cannot_be_moved_into_place_leaves_nothing_behind(
     with pytest.raises(SigningError, match=r"couldn't be saved as signed\.png"):
         sdk.sign_file(source, destination, manifest, SIGNER)
     assert list(destination.parent.iterdir()) == []
+
+
+def with_remote_manifest(png: bytes, url: str) -> bytes:
+    """A PNG whose XMP links to a manifest kept online, as Firefly's downloads do."""
+    xmp = (
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF'
+        ' xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about=""'
+        f' xmlns:dcterms="http://purl.org/dc/terms/" dcterms:provenance="{url}"/>'
+        "</rdf:RDF></x:xmpmeta>"
+    ).encode()
+    data = b"XML:com.adobe.xmp\x00\x00\x00\x00\x00" + xmp
+    chunk = (
+        struct.pack(">I", len(data))
+        + b"iTXt"
+        + data
+        + struct.pack(">I", zlib.crc32(b"iTXt" + data))
+    )
+    return png[:33] + chunk + png[33:]  # after the signature and the IHDR chunk
+
+
+def test_signing_never_fetches_a_parents_manifest_from_the_network(tmp_path: Path):
+    """S5, 18 Oct 2026: Adobe keeps manifests online, linked from the file, and with fetching
+    on, c2pa-rs fetched a parent's while signing. A local server stands in for Adobe's."""
+    requests: list[str] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            requests.append(self.path)
+            self.send_response(404)
+            self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:  # keeps the test output quiet
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_port}/manifests/parent"
+    try:
+        export = mapping.Export(title="signed.png", format="png", at=log.now())
+        manifest = mapping.manifest(storage.start("parent.png"), export)
+        parent = with_remote_manifest(IMAGES["image/png"].read_bytes(), url)
+        ingredients = [
+            IngredientData(i.definition["instance_id"], parent) for i in manifest.ingredients
+        ]
+        result = sdk.sign_file(
+            source_for("png", tmp_path), tmp_path / "signed.png", manifest, SIGNER, ingredients
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert requests == []
+    assert result.validation.is_acceptable()
+    store = json.loads(result.manifest_text)
+    (ingredient,) = store["manifests"][store["active_manifest"]]["ingredients"]
+    failure = ingredient["validation_results"]["activeManifest"]["failure"]
+    assert [(entry["code"], entry["url"]) for entry in failure] == [("manifest.inaccessible", url)]
 
 
 def test_a_failed_signature_keeps_the_previous_file(tmp_path: Path):

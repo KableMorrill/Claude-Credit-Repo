@@ -138,6 +138,7 @@ Settings ▸ Dockers ▸ Provenance Log turns the docker on; Krita keeps it on a
 | # | In Krita | Expected |
 | --- | --- | --- |
 | 43 | Open a PNG or JPEG and export it with Provenance: Export Signed Image… | The statement ends "The document began as an image opened from a file; how that image was made is not recorded by this plugin." |
+| 44 | Optional: open an image edited in Firefly (its credentials are kept online), export it | "Saved and signed", read back Valid with the signer untrusted, and the statement above. The export doesn't fetch Firefly's credentials (no network at export, decision of 18 Oct 2026), so the image's own history isn't in it |
 
 ## Results
 
@@ -153,3 +154,4 @@ Settings ▸ Dockers ▸ Provenance Log turns the docker on; Krita keeps it on a
 | 18 Oct 2026 | Same | 27–28 completed; 33–40, on 582109f | Pass. 27: Verify offers "Show sources (1)", which shows the parent image. 28: both export buttons did what the row says. 33: the docker showed old-test.kra's log with every event, the unsigned export's reason under "Last export in this session:", and the capture status. 34: it follows the active document; with no document open Krita hides its dockers behind the welcome page, so "No document is open." never shows. 35: the generation appeared as soon as it was applied. 36: "exported png, signed" and the read-back lines. 37: "parentOf: S30_test.kra", logged at this reopening; row 30's export isn't in the log, as when the document isn't saved after an export. 38 to 40: the zip imported, Check Environment read 0.1.0.dev0, Set Up Signing found the install ("Already installed; nothing was downloaded.") and the 14 Oct certificate, and the dev link went back in. **V1 and I1 pass** |
 | 18 Oct 2026 | Same | 41–42, on c31ab29 | 42 passes: a script-made document logged its first generation under "(started_with_content)". 41's export (19:50 UTC) ran in a Krita session started before decision 1 reached the checkout (19:20 UTC), so its line is the older form, as the row allows; rerun 41 after restarting Krita (`tests/test_exporter.py` now builds 41's line from a real export). Row 37's missing events: the document wasn't saved after row 30, so the reopened .kra held the log as it was saved before |
 | 18 Oct 2026 | Same, Krita restarted | 41 rerun, on fe60895 | Passes: "exported png, signed, read back Valid, signer untrusted" after save and reopen |
+| 18 Oct 2026 | Same | 43, on 10b4aae | Passes: an opened image's export ends with the new sentence |

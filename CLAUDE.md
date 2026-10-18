@@ -283,17 +283,25 @@ test modules.
   Adobe's synthetic 2022 samples and Nikon and Truepic camera images). Firefly edited the
   user's signed S36.png twice (facts, below). Adobe records each AI edit as a `c2pa.edited`
   action with `compositeWithTrainedAlgorithmicMedia` and the model as software agent, never as
-  a `componentOf` ingredient. That is v0.1's form, so for Q1 S5 says keep it; the user has to
-  confirm. The user's first file came from Google's Gemini Flash partner model and carries
-  only Google's manifest. docs/go-no-go.md is updated.
+  a `componentOf` ingredient. That is v0.1's form, and Q1 keeps it (fifth set, below). The
+  user's first file came from Google's Gemini Flash partner model and carries only Google's
+  manifest. docs/go-no-go.md is updated.
 - **Decisions of 18 Oct 2026, fourth set**, from the user: (1) an opened image's statement ends
   "The document began as an image opened from a file; how that image was made is not recorded
-  by this plugin." ("for now"); built, smoke row 43. (2) `b6e015c` was pushed; ask again before
-  pushing later work.
+  by this plugin." ("for now"); built, smoke row 43 passes. (2) `b6e015c` was pushed; ask again
+  before pushing later work.
+- **Decisions of 18 Oct 2026, fifth set**, from the user: (1) **Q1:** generations stay
+  `c2pa.edited` actions with `compositeWithTrainedAlgorithmicMedia` alone, as Adobe records
+  them; no `componentOf` ingredient. (2) **No network at export:** sdk.py runs every SDK call
+  with remote manifest fetching off (`sdk.SETTINGS`, `_context`); `tests/test_sdk.py` signs
+  with a parent linked to a local server and checks that nothing was requested. Fetching an
+  opened image's online manifest with consent at open time is C6 and P2's (v1.0). (3) The
+  thumbnail of an opened image in exports stays for now and becomes a choice of D2's
+  disclosure levels (v1.0): useful, but not wanted by everyone, and it takes space.
+  (4) `10b4aae` was pushed; ask again before pushing later work.
 - **Go/no-go note:** drafted in [docs/go-no-go.md](docs/go-no-go.md) on 18 Oct 2026; final
   once S5 runs. Recommendation: go.
-- **Not done:** smoke row 43, and the user's answers to the questions under "Open technical
-  questions" (Q1, the network fetch at export, the parent thumbnail).
+- **Not done:** optional smoke row 44 (an image with online credentials, exported in Krita).
   **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
   inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
   S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
@@ -316,9 +324,8 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** the user's answers (open questions) and smoke row 43; S1 on macOS and Linux if the
-  user has those machines; the go/no-go call (25 Oct 2026); the Krita AI Diffusion issue with a
-  demo (the user opens it; Claude may draft it).
+- **Next:** S1 on macOS and Linux if the user has those machines; the go/no-go call (25 Oct
+  2026); the Krita AI Diffusion issue with a demo (the user opens it; Claude may draft it).
 
 ## Layout
 
@@ -663,10 +670,10 @@ user's files, kept out of the repo):
     default trust settings report Adobe's signer as untrusted.
 - With such a file as our parent, the export signs and validates, but the parent ingredient
   has no manifest: `manifest.inaccessible`, "Remote manifest not fetched". c2pa-rs tried to
-  fetch it while signing (the entry quotes the failed request): a network call at export,
-  though sdk.py's docstring says none is made. A `c2pa.Context` built with
-  `Settings.from_dict({"verify": {"remote_manifest_fetch": False}})`, passed to
-  `Builder.from_json` and `Reader`, stops the request; the entry then records only the URL.
+  fetch it while signing (the entry quotes the failed request): a network call at export. A
+  `c2pa.Context` built with `Settings.from_dict({"verify": {"remote_manifest_fetch": False}})`,
+  passed to `Builder.from_json` and `Reader`, stops the request, and the entry then records
+  only the URL. sdk.py has done so for every call since 18 Oct 2026 (fifth set).
 - An export of a document opened from an image embeds a thumbnail of that image
   (`c2pa.thumbnail.ingredient`); Verify's "Show sources" shows it (smoke row 27).
 
@@ -707,23 +714,18 @@ Raise these with the user rather than settling them silently.
   document with content starts as `started_with_content`. An unnamed autosave being recovered
   still opens under its autosave path, so its log starts as `existing_document` with that file
   as parent; it isn't claimed blank.
-- Q1 (generation as an action only, or also as an ingredient) waits on S5. Build the action-only
-  form, with the choice in one place.
+- Q1 (generation as an action only, or also as an ingredient) is decided: actions only, as
+  Adobe records them (S5; fifth set of 18 Oct 2026). The choice stays in one place.
 - A document the plugin first sees after it already has content is decided (decision 2 above),
   and an unsaved one at export gets the save/unsigned/cancel dialog (second set, 3).
 - A known event type drops fields this version doesn't know when the log is written back;
   only unknown event types survive whole (`log.UnknownEvent`). `read_back` (18 Oct 2026) is
   the first added field. The user deferred this until closer to a release (18 Oct 2026): then
   decide whether known events keep unknown fields, so fields added later survive older readers.
-- Asked of the user 18 Oct 2026, after S5 (facts: "Images from other generators"):
-  1. Turn off remote manifest fetching in `sdk.py`, for signing and reading, so an export
-     never contacts a server (recommended). The parent's online history then stays out on every
-     machine, as it already does on this one, and the opened-image note covers it. Fetching it
-     with consent at open time is C6 and P2's (v1.0).
-  2. An export of a document opened from an image carries a thumbnail of that image, so a
-     source painted over still shows in small. Keep it (standard, and how Verify shows
-     sources), drop ingredient thumbnails, or leave it to D2's disclosure levels (v1.0).
-  3. Confirm Q1: generations stay actions alone, as Adobe records them.
+- For v1.0, from S5 (fifth set of 18 Oct 2026): D2's disclosure levels decide whether an
+  export carries a thumbnail of the image it was opened from (it does now, so a source painted
+  over still shows in small). C6 and P2 can fetch an opened image's online manifest at open
+  time, with the user's consent, and keep it for export; exports themselves never fetch.
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 

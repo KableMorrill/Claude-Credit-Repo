@@ -16,6 +16,11 @@ What it guarantees:
   saves the plain export under ``unsigned_name()``.
 - Imported manifests are read only through the SDK, files over a size cap are refused, and the
   manifest text comes back as plain JSON for display as plain text.
+- No network. Every SDK call runs with remote manifest fetching off. Adobe keeps its manifests
+  online, linked from the file's XMP, and with fetching on c2pa-rs fetched a parent's while
+  signing (spike S5, 18 Oct 2026). Such a parent is signed in without its manifest, and its
+  ingredient records ``manifest.inaccessible`` with the link; fetching one with the user's
+  consent when the image is opened belongs to C6 and P2.
 
 Checked against c2pa-python 0.38.0 (c2pa-rs 0.91.0): with a signer the SDK does not trust,
 ``validation_state`` is "Valid" and ``validation_results.activeManifest.failure`` holds one
@@ -52,6 +57,8 @@ MAX_MANIFEST_TEXT = 4 * 1024 * 1024  # characters of manifest JSON kept for disp
 MIME_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}  # E2
 
 UNSIGNED_SUFFIX = "-unsigned"
+
+SETTINGS = {"verify": {"remote_manifest_fetch": False}}  # no network (module docstring)
 
 
 class SdkError(Exception):
@@ -171,7 +178,8 @@ def sign_file(
     temporary = Path(temporary_name)
     try:
         native_signer = _signer(c2pa, signer)
-        builder = c2pa.Builder(manifest.definition)
+        context = _context(c2pa)
+        builder = c2pa.Builder.from_json(manifest.definition, context)
         _set_intent(c2pa, builder, manifest)
         for ingredient in manifest.ingredients:
             instance_id = ingredient.definition["instance_id"]
@@ -217,8 +225,9 @@ def read_file(path: Path, max_bytes: int = MAX_READ_BYTES) -> ReadResult | None:
     size = path.stat().st_size
     if size > max_bytes:
         raise ReadError(f"{path.name} is {size} bytes; files over {max_bytes} bytes are not read")
+    context = _context(c2pa)
     try:
-        with c2pa.Reader(path) as reader:
+        with c2pa.Reader(path, context=context) as reader:
             text = reader.json()
     except c2pa.C2paError.ManifestNotFound:
         return None
@@ -241,8 +250,9 @@ def read_file(path: Path, max_bytes: int = MAX_READ_BYTES) -> ReadResult | None:
 def data_hash_exclusions(path: Path) -> list[dict[str, Any]]:
     """The exclusions in the active manifest's data-hash assertion (E5)."""
     c2pa = _c2pa()
+    context = _context(c2pa)
     try:
-        with c2pa.Reader(path) as reader:
+        with c2pa.Reader(path, context=context) as reader:
             detailed = json.loads(reader.detailed_json())
     except c2pa.C2paError as error:
         raise ReadError(f"Could not read {path.name}: {error}") from error
@@ -268,6 +278,11 @@ def _c2pa() -> Any:
     except ImportError as error:
         raise SdkMissing(f"{SDK_DISTRIBUTION} is not installed") from error
     return c2pa
+
+
+def _context(c2pa: Any) -> Any:
+    """The SDK's settings for one call; the caller keeps it alive while the call runs."""
+    return c2pa.Context(settings=c2pa.Settings.from_dict(SETTINGS))
 
 
 def _signer(c2pa: Any, config: SignerConfig) -> Any:

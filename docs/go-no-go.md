@@ -1,7 +1,6 @@
 # Go/no-go note: M0 spikes
 
-Draft, 18 October 2026, due 25 October 2026. Final once Q1 is confirmed and the go/no-go call
-is made.
+Draft, 18 October 2026, due 25 October 2026. Final once the go/no-go call is made.
 
 **Recommendation: go.** All five spikes pass: S1 on Windows only, with a workaround for macOS
 and Linux, and S5 with Firefly standing in for Photoshop. M1's scope (v0.1) is already built and
@@ -18,7 +17,7 @@ M0's exit gate: each spike passes or has a written workaround.
 | S2 | Does the SDK accept a locally made root CA and signing certificate, and does Adobe's Verify show the signer as unrecognized? | **Passes** (14 to 16 Oct). Verify reads full manifests once regions are written as polygons: it runs c2pa-rs 0.85.2, which can't read rectangles |
 | S3 | Can a separate plugin catch Krita AI Diffusion's `result_used`, copy the job's parameters and find the layer that received the result? | **Passes** (16 Oct), once the "before" snapshot of the layers was taken at user input instead of from a timer |
 | S4 | Does a custom annotation survive save and reopen beside Krita AI Diffusion's `ui.json`? | **Passes** (13 Oct) |
-| S5 | How do a Firefly image and a Photoshop Generative Fill export record AI use (Q1)? | **Passes, with Firefly standing in for Photoshop** (18 Oct). Firefly edited a signed Krita export twice: a prompt edit by Firefly Image 5, then a Generative Fill ("Generate Fill 1"). Each step adds a `c2pa.edited` action with `compositeWithTrainedAlgorithmicMedia` naming the model, and the fill's selected zone is an `inputTo` ingredient. Neither attaches the generated content as a `componentOf` ingredient: Adobe records AI edits as actions alone, as v0.1 does. Both kept our manifest at the root of their chain. An image from Google's Gemini Flash partner model carries only Google's manifest (`c2pa.created` with `trainedAlgorithmicMedia`) |
+| S5 | How do a Firefly image and a Photoshop Generative Fill export record AI use (Q1)? | **Passes, with Firefly standing in for Photoshop** (18 Oct). Firefly edited a signed Krita export twice: a prompt edit by Firefly Image 5, then a Generative Fill ("Generate Fill 1"). Each step adds a `c2pa.edited` action with `compositeWithTrainedAlgorithmicMedia` naming the model, and the fill's selected zone is an `inputTo` ingredient. Neither attaches the generated content as a `componentOf` ingredient: Adobe records AI edits as actions alone, as v0.1 does, so Q1 keeps that form (decided 18 Oct). Both kept our manifest at the root of their chain. An image from Google's Gemini Flash partner model carries only Google's manifest (`c2pa.created` with `trainedAlgorithmicMedia`) |
 
 ### Workarounds
 
@@ -86,20 +85,19 @@ M1's exit gate:
 - If an older version of the plugin rewrites a log, it drops fields it doesn't know from the
   event types it does know. This is to be settled before the first release.
 - Adobe keeps a file's manifest online, with only a link in the file. Opened in Krita, such an
-  image loses that history in our export: the export records that it couldn't include it. While
-  signing, the SDK also tries to fetch it, a network call at export that the project otherwise
-  avoids (to decide).
+  image loses that history in our export, which records that it couldn't include it, and the
+  statement says how the image was made isn't recorded. Exports never fetch it (no network at
+  export, decided 18 Oct); fetching it with consent when the image is opened is v1.0 work (C6,
+  P2).
 
 ## Open questions
 
-For Q1, S5 points to keeping generations as actions alone (to confirm). Q2 and Q10 are
-answered. Q3 (standard disclosure), Q4 (no timestamps in v0.1),
+Q1 is decided: generations stay actions alone. Q2 and Q10 are answered. Q3 (standard disclosure), Q4 (no timestamps in v0.1),
 Q5 (keys in the data folder) and Q6 (GPL-3.0-or-later is compatible) are decided for v0.1. Q7
 (Krita 6), Q8 (model identity), Q9 (reference images and prompts as ingredients) and Q11
 (`c2pa.ai-disclosure`) stay open for M2.
 
 ## To finish M0
 
-1. Confirm Q1: generations stay actions alone.
-2. S1 on macOS and Linux, or accept the workaround above for now.
-3. The go/no-go decision.
+1. S1 on macOS and Linux, or accept the workaround above for now.
+2. The go/no-go decision.
