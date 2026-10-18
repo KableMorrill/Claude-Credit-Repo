@@ -278,15 +278,22 @@ test modules.
   their work. (2) docs/spec.md's log example now shows `read_back`, at the user's request, and
   the `spec_example` golden log matches it (its manifest is unchanged). (3) `fe60895` was
   pushed; ask again before pushing later work.
-- **S5, in progress (18 Oct 2026):** the user has no Adobe subscription. No public Generative
-  Fill sample turned up: the C2PA public test files hold Adobe's synthetic 2022 samples and
-  Nikon and Truepic camera images, and searches found no published Generative Fill manifest.
-  The user's first Firefly file came from Google's Gemini Flash partner model and is Google's
-  work (facts, below). Asked of the user: an image from Adobe's own Firefly model, and an edit
-  with Firefly's own Generative Fill, ideally of a signed Krita export.
+- **S5 passes, with Firefly standing in for Photoshop (18 Oct 2026).** The user has no Adobe
+  subscription, and no public Generative Fill sample turned up (the C2PA public test files hold
+  Adobe's synthetic 2022 samples and Nikon and Truepic camera images). Firefly edited the
+  user's signed S36.png twice (facts, below). Adobe records each AI edit as a `c2pa.edited`
+  action with `compositeWithTrainedAlgorithmicMedia` and the model as software agent, never as
+  a `componentOf` ingredient. That is v0.1's form, so for Q1 S5 says keep it; the user has to
+  confirm. The user's first file came from Google's Gemini Flash partner model and carries
+  only Google's manifest. docs/go-no-go.md is updated.
+- **Decisions of 18 Oct 2026, fourth set**, from the user: (1) an opened image's statement ends
+  "The document began as an image opened from a file; how that image was made is not recorded
+  by this plugin." ("for now"); built, smoke row 43. (2) `b6e015c` was pushed; ask again before
+  pushing later work.
 - **Go/no-go note:** drafted in [docs/go-no-go.md](docs/go-no-go.md) on 18 Oct 2026; final
   once S5 runs. Recommendation: go.
-- **Not done:** S5 (above).
+- **Not done:** smoke row 43, and the user's answers to the questions under "Open technical
+  questions" (Q1, the network fetch at export, the parent thumbnail).
   **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
   inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
   S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
@@ -309,10 +316,9 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** S5 once the user has the Adobe files (dump them with c2patool, compare with ours,
-  bring the user the Q1 choice, finish the go/no-go note); the user's answer on the
-  opened-image statement (open questions); S1 on macOS and Linux if the user has those
-  machines; the Krita AI Diffusion issue with a demo (the user opens it; Claude may draft it).
+- **Next:** the user's answers (open questions) and smoke row 43; S1 on macOS and Linux if the
+  user has those machines; the go/no-go call (25 Oct 2026); the Krita AI Diffusion issue with a
+  demo (the user opens it; Claude may draft it).
 
 ## Layout
 
@@ -624,7 +630,7 @@ methods, so `.connect` on them needs a `pyright: ignore`.
   neither it nor the `DockPosition` enum is in our stubs.
 
 **Images from other generators** (18 Oct 2026, c2patool 0.27.22 and c2pa-python 0.38.0; the
-user's file, kept out of the repo):
+user's files, kept out of the repo):
 
 - A Firefly download made with Google's Gemini Flash partner model holds one manifest,
   Google's: "Google C2PA Core Generator Library", claim v2, signed by Google LLC as "Google
@@ -639,6 +645,30 @@ user's file, kept out of the repo):
   certificate) validates with only our untrusted signer, and the store keeps Google's manifest
   as the parent's, beneath ours; c2pa-python and c2patool agree. An opened image that carries
   credentials keeps them through an export from Krita, even in v0.1.
+- Firefly's own edits of the user's signed S36.png keep their manifests online: the PNG holds
+  only an XMP `dcterms:provenance` link to `cai-manifests.adobe.com`. c2patool couldn't fetch
+  it on this machine (TLS `UnknownIssuer`, as uv had), so the stores were fetched with
+  PowerShell and read with c2pa-python's `Reader(format, stream, manifest_data)`. Each Firefly
+  step is its own manifest, signed by Adobe Inc. ("Adobe C2PA" or "Adobe Firefly C2PA") with a
+  timestamp.
+  - The upload adds `c2pa.opened`, with S36.png's manifest as `parentOf`, and `c2pa.redacted`
+    of our `c2pa.thumbnail.claim`, reason `c2pa.PII.present`.
+  - A prompt edit adds `c2pa.edited`, `compositeWithTrainedAlgorithmicMedia`, software agent
+    "Adobe Firefly Image 5", with `com.adobe.firefly.operation: text_to_image` and a version.
+  - A Generative Fill adds `c2pa.edited`, `compositeWithTrainedAlgorithmicMedia`, software
+    agent "Generate Fill 1", with the selected zone as an `inputTo` ingredient that has no
+    manifest.
+  - No action carries `changes` (regions), and no generated content is a `componentOf`
+    ingredient. Our manifest survives at the root of both chains. All validate; c2pa-python's
+    default trust settings report Adobe's signer as untrusted.
+- With such a file as our parent, the export signs and validates, but the parent ingredient
+  has no manifest: `manifest.inaccessible`, "Remote manifest not fetched". c2pa-rs tried to
+  fetch it while signing (the entry quotes the failed request): a network call at export,
+  though sdk.py's docstring says none is made. A `c2pa.Context` built with
+  `Settings.from_dict({"verify": {"remote_manifest_fetch": False}})`, passed to
+  `Builder.from_json` and `Reader`, stops the request; the entry then records only the URL.
+- An export of a document opened from an image embeds a thumbnail of that image
+  (`c2pa.thumbnail.ingredient`); Verify's "Show sources" shows it (smoke row 27).
 
 **Windows paths** (14 Oct 2026): unpacking cryptography failed with "No such file or
 directory" when the data folder sat about 150 characters deep, because a staged file's path
@@ -685,12 +715,15 @@ Raise these with the user rather than settling them silently.
   only unknown event types survive whole (`log.UnknownEvent`). `read_back` (18 Oct 2026) is
   the first added field. The user deferred this until closer to a release (18 Oct 2026): then
   decide whether known events keep unknown fields, so fields added later survive older readers.
-- Asked of the user 18 Oct 2026: the plain-language statement gives existing and pasted
-  documents a note about what came before the log, but an opened image none, so a document
-  begun from an AI image reads "No AI generation observed by this plugin since …" alone (its
-  manifest does carry the image's own credentials). Proposed addition for `opened_image`: "The
-  document began as an image opened from a file; how that image was made is not recorded by
-  this plugin." One string in `mapping.ai_use_statement`.
+- Asked of the user 18 Oct 2026, after S5 (facts: "Images from other generators"):
+  1. Turn off remote manifest fetching in `sdk.py`, for signing and reading, so an export
+     never contacts a server (recommended). The parent's online history then stays out on every
+     machine, as it already does on this one, and the opened-image note covers it. Fetching it
+     with consent at open time is C6 and P2's (v1.0).
+  2. An export of a document opened from an image carries a thumbnail of that image, so a
+     source painted over still shows in small. Keep it (standard, and how Verify shows
+     sources), drop ingredient thumbnails, or leave it to D2's disclosure levels (v1.0).
+  3. Confirm Q1: generations stay actions alone, as Adobe records them.
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 

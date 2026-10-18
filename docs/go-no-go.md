@@ -1,11 +1,12 @@
 # Go/no-go note: M0 spikes
 
-Draft, 18 October 2026, due 25 October 2026. Spike S5 hasn't run yet; this note becomes final
-once it has.
+Draft, 18 October 2026, due 25 October 2026. Final once Q1 is confirmed and the go/no-go call
+is made.
 
-**Recommendation: go.** Four of the five spikes pass on Windows, and the fifth has a workaround.
-M1's scope (v0.1) is already built and checked inside Krita on Windows. Of M1's exit gate, only
-the Krita AI Diffusion issue with a demo is left.
+**Recommendation: go.** All five spikes pass: S1 on Windows only, with a workaround for macOS
+and Linux, and S5 with Firefly standing in for Photoshop. M1's scope (v0.1) is already built and
+checked inside Krita on Windows. Of M1's exit gate, only the Krita AI Diffusion issue with a demo
+is left.
 
 ## Spikes
 
@@ -17,7 +18,7 @@ M0's exit gate: each spike passes or has a written workaround.
 | S2 | Does the SDK accept a locally made root CA and signing certificate, and does Adobe's Verify show the signer as unrecognized? | **Passes** (14 to 16 Oct). Verify reads full manifests once regions are written as polygons: it runs c2pa-rs 0.85.2, which can't read rectangles |
 | S3 | Can a separate plugin catch Krita AI Diffusion's `result_used`, copy the job's parameters and find the layer that received the result? | **Passes** (16 Oct), once the "before" snapshot of the layers was taken at user input instead of from a timer |
 | S4 | Does a custom annotation survive save and reopen beside Krita AI Diffusion's `ui.json`? | **Passes** (13 Oct) |
-| S5 | How do a Firefly image and a Photoshop Generative Fill export record AI use (Q1)? | **In progress** (18 Oct). The first file, made in Firefly with Google's Gemini Flash partner model, carries only Google's manifest: the image is `c2pa.created` with `trainedAlgorithmicMedia`, its input an `inputTo` ingredient with no content, and the SynthID watermark a `c2pa.edited` action. An export from Krita with that image as its parent keeps Google's manifest beneath ours and validates. Still needed: an image from Adobe's own Firefly model, and an Adobe fill edit, which is what Q1 turns on (workaround below) |
+| S5 | How do a Firefly image and a Photoshop Generative Fill export record AI use (Q1)? | **Passes, with Firefly standing in for Photoshop** (18 Oct). Firefly edited a signed Krita export twice: a prompt edit by Firefly Image 5, then a Generative Fill ("Generate Fill 1"). Each step adds a `c2pa.edited` action with `compositeWithTrainedAlgorithmicMedia` naming the model, and the fill's selected zone is an `inputTo` ingredient. Neither attaches the generated content as a `componentOf` ingredient: Adobe records AI edits as actions alone, as v0.1 does. Both kept our manifest at the root of their chain. An image from Google's Gemini Flash partner model carries only Google's manifest (`c2pa.created` with `trainedAlgorithmicMedia`) |
 
 ### Workarounds
 
@@ -27,14 +28,11 @@ M0's exit gate: each spike passes or has a written workaround.
   Linux; M3's test matrix covers them for v1.0. Intel Macs and Windows on ARM get no local
   signing key, because no current `cryptography` wheel exists for them. That gap is accepted
   (decision 4 of 13 Oct), and K2's bring-your-own certificate (M2) is the way to sign there.
-- **S5.** v0.1 records each generation as a `c2pa.edited` action with
-  `compositeWithTrainedAlgorithmicMedia` alone, the form the spec builds first, and the choice
-  sits in one place in `mapping.py`. Manifests are rebuilt from the log at every export. If S5
-  shows that generations should also be `componentOf` ingredients, documents logged before the
-  change get the new form at their next export. No public Generative Fill sample turned up (the
-  C2PA public test files hold Adobe's synthetic 2022 samples and camera images). Without a
-  Photoshop subscription, an edit with Firefly's own Generative Fill is the nearest Adobe
-  example.
+- **S5's Photoshop file.** Without a Photoshop subscription, Firefly's own Generative Fill
+  stood in, and no public Photoshop sample turned up (the C2PA public test files hold Adobe's
+  synthetic 2022 samples and camera images). If a Photoshop export ever records a fill
+  differently, the choice sits in one place in `mapping.py`, and manifests are rebuilt from the
+  log at every export, so earlier documents get the new form at their next export.
 
 ## M1, already built
 
@@ -69,7 +67,11 @@ M1's exit gate:
 - Live painting, upscaling and control-layer results don't announce themselves, so v0.1 doesn't
   observe them (C7). The README says so.
 - Every export states what the plugin didn't observe: the log's start date, capture gaps,
-  content a document already had, and generated layers deleted or hidden before export.
+  content a document already had or the image it was opened from, and generated layers deleted
+  or hidden before export.
+- Credentials travel both ways. Firefly kept our export's manifest at the root of its chain,
+  redacting only its thumbnail, which Adobe treats as possibly personal. An image that carries
+  its credentials in the file, such as Google's, keeps them through an export from Krita.
 
 ## Risks carried into M1
 
@@ -83,16 +85,21 @@ M1's exit gate:
   and says why.
 - If an older version of the plugin rewrites a log, it drops fields it doesn't know from the
   event types it does know. This is to be settled before the first release.
+- Adobe keeps a file's manifest online, with only a link in the file. Opened in Krita, such an
+  image loses that history in our export: the export records that it couldn't include it. While
+  signing, the SDK also tries to fetch it, a network call at export that the project otherwise
+  avoids (to decide).
 
 ## Open questions
 
-Q1 waits on S5. Q2 and Q10 are answered. Q3 (standard disclosure), Q4 (no timestamps in v0.1),
+For Q1, S5 points to keeping generations as actions alone (to confirm). Q2 and Q10 are
+answered. Q3 (standard disclosure), Q4 (no timestamps in v0.1),
 Q5 (keys in the data folder) and Q6 (GPL-3.0-or-later is compatible) are decided for v0.1. Q7
 (Krita 6), Q8 (model identity), Q9 (reference images and prompts as ingredients) and Q11
 (`c2pa.ai-disclosure`) stay open for M2.
 
 ## To finish M0
 
-1. S5: dump and compare a Firefly image and a Photoshop Generative Fill export, then decide Q1.
+1. Confirm Q1: generations stay actions alone.
 2. S1 on macOS and Linux, or accept the workaround above for now.
 3. The go/no-go decision.

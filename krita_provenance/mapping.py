@@ -322,6 +322,11 @@ def ai_use_statement(entry: ProvenanceLog) -> str:
             " The document was created with content already in it; how that content was made is"
             " not recorded."
         )
+    elif entry.started.reason == log.OPENED_IMAGE:  # the user's wording, 18 Oct 2026
+        text += (
+            " The document began as an image opened from a file; how that image was made is not"
+            " recorded by this plugin."
+        )
     if gaps:
         plural = "s" if len(gaps) != 1 else ""
         text += f" Capture was interrupted {len(gaps)} time{plural}; see the log for when."

@@ -344,6 +344,16 @@ def test_ai_use_statement_reads_absence_as_not_observed():
     )
 
 
+def test_an_opened_image_is_said_to_come_from_outside_the_plugins_record():
+    """S5, 18 Oct 2026: an image from another AI tool, opened in Krita, read only "No AI
+    generation observed …"; its own credentials were in the manifest, but not in the statement."""
+    entry = ProvenanceLog("doc", LogStart(T0, log.OPENED_IMAGE))
+    assert mapping.ai_use_statement(entry) == (
+        "No AI generation observed by this plugin since 2 November 2026 (UTC). The document began"
+        " as an image opened from a file; how that image was made is not recorded by this plugin."
+    )
+
+
 def test_a_session_krita_ai_diffusion_couldnt_be_followed_in_has_no_known_end():
     gap = CaptureGap(T0, T0, log.AI_DIFFUSION_UNOBSERVED)
     statement = mapping.gap_statement(gap)
