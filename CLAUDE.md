@@ -14,8 +14,8 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
 ## Handover (13 Oct 2026, from the Fable session, updated by the Opus session)
 
 Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, pushed at
-the user's request on 14, 15 and 16 Oct 2026 (CI green through `86ff031`; check the run for
-later pushes). From `c86d349` on, work happens in the user's Windows 11 checkout (Python 3.12 venv,
+the user's request on 14, 15, 16 and 18 Oct 2026 (CI green through `c31ab29`; check the run
+for later pushes). From `c86d349` on, work happens in the user's Windows 11 checkout (Python 3.12 venv,
 no c2patool), where all four checks pass.
 
 Results in (13 Oct 2026, Opus session): smoke rows 1 to 8 pass on Windows 11 (S1's Python
@@ -261,7 +261,21 @@ test modules.
     and kept: observation events at open are saved with the next change and re-added at each
     open until then, and a declined save prompt discards new events with everything else
     (smoke row 37).
-- **Not done:** smoke rows 41 (decision 1) and 42 (the append fix) in Krita.
+- **Results, 18 Oct 2026:** smoke row 42 passes (a script-made document starts as
+  `started_with_content`). Row 41's export ran in a Krita session started before decision 1
+  reached the checkout, so it needs a rerun. Row 37's missing events came from closing row 30's
+  document without saving: the user had taken the save prompts for Krita AI Diffusion's. The
+  prompt after an export is this plugin's (decision 3 of 16 Oct). **M1's c2patool gate item is
+  met:** c2patool 0.27.22 (GitHub's Windows build, SHA-256 checked, run from the scratchpad, not
+  installed) read seven real exports from Krita as Valid, with `signingCredential.untrusted` the
+  only failure code and the expected actions. It found no claim in the unsigned export.
+- **Decisions of 18 Oct 2026, second set**, from the user: (1) no compatibility with older logs
+  or older plugin versions is needed while this is a dev build only the user runs; settle the
+  open question about unknown fields closer to a release. (2) `ecb48ab` and `c31ab29` were
+  pushed; ask again before pushing later work.
+- **Go/no-go note:** drafted in [docs/go-no-go.md](docs/go-no-go.md) on 18 Oct 2026; final
+  once S5 runs. Recommendation: go.
+- **Not done:** smoke row 41's rerun; S5 (needs the user's Firefly and Photoshop files).
   **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
   inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
   S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
@@ -284,10 +298,10 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** smoke rows 41 and 42. Then M1's other items: c2patool on a real export (G3's
-  second reader; Verify has read one), S5 (needs the user's Firefly and Photoshop files),
-  macOS and Linux checks, the go/no-go note (25 Oct 2026), and the Krita AI Diffusion issue
-  with a demo (the user's).
+- **Next:** row 41's rerun; S5 once the user supplies a Firefly image and a Photoshop
+  Generative Fill export (dump both, compare with ours, decide Q1, finish the go/no-go note);
+  S1 on macOS and Linux if the user has those machines; the Krita AI Diffusion issue with a
+  demo (the user opens it; Claude may draft it).
 
 ## Layout
 
@@ -323,6 +337,7 @@ tests/fixtures/certs/      test root CA and signing certificate; never sign anyt
 tests/fixtures/images/     16x16 PNG and JPEG placeholders and a .kra-shaped zip for ingredients
 docs/spec.md               the project spec
 docs/smoke-checklist.md    checks the user runs inside Krita
+docs/go-no-go.md           the go/no-go note that closes M0 (draft until S5 runs)
 .github/workflows/ci.yml   CI on every push
 ```
 
@@ -640,9 +655,8 @@ Raise these with the user rather than settling them silently.
   and an unsaved one at export gets the save/unsigned/cancel dialog (second set, 3).
 - A known event type drops fields this version doesn't know when the log is written back;
   only unknown event types survive whole (`log.UnknownEvent`). `read_back` (18 Oct 2026) is
-  the first added field, and no release has shipped, so no older reader can meet it. Before
-  v0.1 ships, decide whether known events should keep unknown fields, so fields added later
-  survive a v0.1 reader.
+  the first added field. The user deferred this until closer to a release (18 Oct 2026): then
+  decide whether known events keep unknown fields, so fields added later survive older readers.
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 

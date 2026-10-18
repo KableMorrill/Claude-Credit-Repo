@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from goldens import comparable, load_case, read_actions
-from krita_provenance import exporter, mapping, sdk
+from krita_provenance import exporter, mapping, sdk, storage
 from krita_provenance.exporter import ExportError
 from krita_provenance.log import ProvenanceLog, ReadBack
 from krita_provenance.sdk import SignerConfig
@@ -107,6 +107,16 @@ def test_a_signing_failure_leaves_the_chosen_name_alone(tmp_path: Path):
     assert not outcome.signed and outcome.path.name == "harbour-unsigned.png"
     assert destination.read_bytes() == b"an earlier export"  # left as it was (E6)
     assert "Nothing was written under the name you chose" in outcome.to_text(entry)
+
+
+def test_the_logged_export_shows_its_read_back(tmp_path: Path, signer):
+    """Smoke row 41's line, from the export through the annotation bytes to Log Status."""
+    entry, details, _ = load_case("nothing_observed")
+    outcome = exporter.export(entry, rendered(tmp_path), tmp_path / "a.png", details, signer, None)
+    logged = storage.read(storage.append(storage.serialize(entry), None, outcome.event))
+    assert logged is not None
+    last_line = storage.summary(logged, latest=None).splitlines()[-1]
+    assert last_line.endswith("exported png, signed, read back Valid, signer untrusted")
 
 
 def test_no_signer_or_the_users_choice_means_unsigned(tmp_path: Path, signer):

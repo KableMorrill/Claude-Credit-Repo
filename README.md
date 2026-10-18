@@ -47,6 +47,7 @@ has no per-stroke events.
 - [docs/spec.md](docs/spec.md): the project spec, covering goals, requirements, the log format,
   the C2PA mapping, the threat model and milestones.
 - [docs/smoke-checklist.md](docs/smoke-checklist.md): checks to run by hand inside Krita.
+- [docs/go-no-go.md](docs/go-no-go.md): the go/no-go note at the end of the spikes (M0).
 - [CLAUDE.md](CLAUDE.md): the working brief for Claude, with current state, rules and build order.
 
 ## Development
