@@ -123,7 +123,8 @@ def export(
             reason = str(error)
         else:
             label = result.manifest_label
-            event = Exported(details.at, details.format, DISCLOSURE, label)
+            read_back = log.ReadBack(result.validation.state, result.validation.failures)
+            event = Exported(details.at, details.format, DISCLOSURE, label, read_back)
             return Outcome(destination, True, result.validation, label, None, event)
     target = unsigned_path(destination)
     shutil.copyfile(rendered, target)

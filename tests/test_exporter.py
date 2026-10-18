@@ -15,7 +15,7 @@ import pytest
 from goldens import comparable, load_case, read_actions
 from krita_provenance import exporter, mapping, sdk
 from krita_provenance.exporter import ExportError
-from krita_provenance.log import ProvenanceLog
+from krita_provenance.log import ProvenanceLog, ReadBack
 from krita_provenance.sdk import SignerConfig
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -119,6 +119,7 @@ def test_no_signer_or_the_users_choice_means_unsigned(tmp_path: Path, signer):
     )
     assert not chosen.signed and chosen.reason == "you chose it"
     assert chosen.path.read_bytes() == image.read_bytes()
+    assert outcome.event.read_back is None and chosen.event.read_back is None
 
 
 def test_an_unsigned_name_never_overwrites_an_earlier_file():
@@ -144,3 +145,4 @@ def test_the_report_says_what_was_signed_and_what_was_observed(tmp_path: Path, s
     assert "untrusted, as expected for a local certificate" in text
     assert "No AI generation observed by this plugin since" in text
     assert text == f"{outcome.result_text()}\n\n{mapping.ai_use_statement(entry)}"  # the docker's
+    assert outcome.event.read_back == ReadBack("Valid", (sdk.UNTRUSTED_SIGNER,))  # kept in the log

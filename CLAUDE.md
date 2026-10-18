@@ -56,7 +56,8 @@ Then the rest of step 7, in this order, each piece committed with the four check
    (Krita-free, tested with real signing) builds the manifest, signs, reads back (E4) or saves
    `<name>-unsigned.<ext>` with the reason (E6), and returns the `exported` event, which is
    appended to the log.
-5. Docker (V1) and release zip (I1). **Built 16 Oct 2026, waiting on smoke rows 33 to 40.**
+5. Docker (V1) and release zip (I1). **Done 18 Oct 2026; smoke rows 33 to 40 pass, pushed as
+   `582109f`.** With no document open, Krita hides its dockers behind the welcome page.
    Settings ▸ Dockers ▸ Provenance Log: `_LogDocker` (extension.py) shows
    `storage.summary(entry, latest=None)`, the last export's result in this session, and the
    capture status, in a read-only QPlainTextEdit (plain text: layer names hold prompts). A
@@ -219,13 +220,21 @@ test modules.
   the actions, an image reopened from its .kra signed with the kept copy as parent, a pasted
   document refused to sign until saved and reopened, and a 4000×4000 export took about a
   second. Not reported: Verify's view of row 27's parent and what row 28's two buttons did.
-- **Step 7, piece 5 (16 Oct 2026), unverified in Krita:** the docker and the release zip
-  (handover item 5). The read-back result in the docker (spec: Architecture, "result shows in
-  the docker") comes from memory for exports made this session: the `exported` event has no
-  field for it, and adding one changes the log format (open questions). `tests/test_release.py`
-  checks the zip against the importer's rules, its contents against the package, and that two
-  builds match byte for byte.
-- **Not done:** the review (handover item 6), once the user has tested piece 5.
+- **Step 7, piece 5 (16 Oct 2026), verified in Krita (smoke rows 33 to 40, 18 Oct 2026):** the
+  docker and the release zip (handover item 5). `tests/test_release.py` checks the zip against
+  the importer's rules, its contents against the package, and that two builds match byte for
+  byte. In Krita the zip imported through Import Python Plugin from File, and the data folder,
+  with its packages and key, came through the install untouched (decision 5).
+- **Decisions of 18 Oct 2026**, from the user: (1) keep each export's read-back result in the
+  log for good, adding a field, provided it doesn't interfere with C2PA. Built: `exported`
+  events carry `read_back` (`log.ReadBack`: the SDK's state and failure codes), left out when
+  unsigned and in exports logged earlier, so those write back unchanged. The spec's log
+  example doesn't show it. The mapping skips `exported` events, so manifests are unchanged
+  (the goldens still match). Log Status and the docker end the line "read back Valid, signer
+  untrusted"; the docker's "Last export in this session" still adds the path and, for an
+  unsigned export, the reason, which the log doesn't keep. (2) Piece 5 was pushed (`582109f`);
+  ask again before pushing later work.
+- **Not done:** the review (handover item 6); smoke row 41 checks decision 1 in Krita.
   **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
   inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
   S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
@@ -248,8 +257,7 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** the user tests piece 5 (smoke rows 33 to 40); then the one review (handover
-  item 6).
+- **Next:** the one review (handover item 6), then smoke row 41.
 
 ## Layout
 
@@ -600,9 +608,11 @@ Raise these with the user rather than settling them silently.
   form, with the choice in one place.
 - A document the plugin first sees after it already has content is decided (decision 2 above),
   and an unsaved one at export gets the save/unsigned/cancel dialog (second set, 3).
-- The `exported` event (P1's format) records the label but not the read-back result, so the
-  docker shows E4's result only for exports made in this session. Recording it means a new
-  optional field in the log; ask before changing the format.
+- A known event type drops fields this version doesn't know when the log is written back;
+  only unknown event types survive whole (`log.UnknownEvent`). `read_back` (18 Oct 2026) is
+  the first added field, and no release has shipped, so no older reader can meet it. Before
+  v0.1 ships, decide whether known events should keep unknown fields, so fields added later
+  survive a v0.1 reader.
 - Where the spec proposes a default for an open question, use it (Q3: standard disclosure).
   Otherwise choose the most reversible option, keep it in one place, and list it in your summary.
 

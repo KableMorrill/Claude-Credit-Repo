@@ -8,8 +8,9 @@ glue reads and writes the annotation; this module is Krita-free and tested.
 Rules, from the spec:
 
 - Append only. Nothing here rewrites or drops a past event. A log round-trips through JSON with
-  every event intact, including event types this version doesn't know, so a newer plugin's log
-  survives an older one (P3 migrates older schema versions in v1.0).
+  every event intact, including event types this version doesn't know, so a newer plugin's
+  events survive an older one (P3 migrates older schema versions in v1.0). A field added to a
+  known event type doesn't yet: a version that doesn't know it drops it when writing back.
 - Full prompts stay in the .kra. They are stored here and only the mapping decides what leaves
   (nothing of them, until the disclosure levels D2 and D3 land).
 - Every capture gap is an event, so it can be disclosed (honesty rule 2).
@@ -149,11 +150,22 @@ class CaptureGap:
 
 
 @dataclass(frozen=True)
+class ReadBack:
+    """E4: what reading a signed export back with the SDK reported."""
+
+    state: str | None  # "Valid" or "Trusted", as the SDK reports it
+    failures: tuple[str, ...] = ()  # its validation codes; a local signer is "untrusted"
+
+
+@dataclass(frozen=True)
 class Exported:
     at: datetime
     format: str  # "png" or "jpeg"
     disclosure: str  # "standard" until D2 lands
     manifest_label: str | None  # None when the file was saved unsigned (E6)
+    # Kept since 18 Oct 2026 (the user's decision), so the log shows each export's read-back
+    # for good. None when unsigned, and in exports logged before then. Not in the manifest.
+    read_back: ReadBack | None = None
 
 
 @dataclass(frozen=True)
@@ -295,6 +307,11 @@ def event_to_dict(event: Event) -> dict[str, Any]:
         data["format"] = event.format
         data["disclosure"] = event.disclosure
         data["manifest_label"] = event.manifest_label
+        if event.read_back is not None:  # left out otherwise, so older events write back as read
+            data["read_back"] = {
+                "state": event.read_back.state,
+                "failures": list(event.read_back.failures),
+            }
     return data
 
 
@@ -357,6 +374,7 @@ def event_from_dict(data: Any) -> Event:
             format=_string(data["format"]),
             disclosure=_string(data["disclosure"]),
             manifest_label=_optional(data.get("manifest_label"), _string),
+            read_back=_optional(data.get("read_back"), _read_back),
         )
     return UnknownEvent(kind, dict(data))
 
@@ -377,6 +395,15 @@ def _fields(value: Any, drop_none: bool = False) -> dict[str, Any]:
 
 def _layer(data: Any) -> Layer:
     return Layer(**_strings(data, "uuid", "name"))
+
+
+def _read_back(data: Any) -> ReadBack:
+    if not isinstance(data, Mapping):
+        raise TypeError(f"read_back must be an object, not {data!r}")
+    failures = data.get("failures", [])
+    if not isinstance(failures, list):
+        raise TypeError(f"read_back failures must be a list, not {failures!r}")
+    return ReadBack(_optional(data.get("state"), _string), tuple(_string(f) for f in failures))
 
 
 def _strings(data: Mapping[str, Any], *keys: str) -> dict[str, str]:

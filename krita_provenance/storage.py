@@ -39,9 +39,11 @@ from .log import (
     LayerChanged,
     LogFormatError,
     ProvenanceLog,
+    ReadBack,
 )
 from .mapping import ai_use_statement
 from .scrub import file_name
+from .sdk import UNTRUSTED_SIGNER
 
 DESCRIPTION = "krita-provenance log: AI generations and layer edits observed in this document"
 DOCUMENT_SUFFIXES = (".kra", ".ora")
@@ -194,5 +196,15 @@ def event_line(event: Event) -> str:
         return f"{log.format_time(event.at)}  layer changed: {event.layer.name}"
     if isinstance(event, Exported):
         signed = "signed" if event.manifest_label else "unsigned"
-        return f"{log.format_time(event.at)}  exported {event.format}, {signed}"
+        line = f"{log.format_time(event.at)}  exported {event.format}, {signed}"
+        return line + (f", read back {_read_back(event.read_back)}" if event.read_back else "")
     return f"event of a newer type: {log.event_type(event)}"
+
+
+def _read_back(read_back: ReadBack) -> str:
+    """E4's result in a few words: "Valid, signer untrusted"."""
+    others = [code for code in read_back.failures if code != UNTRUSTED_SIGNER]
+    text = read_back.state or "with no state"
+    if UNTRUSTED_SIGNER in read_back.failures:
+        text += ", signer untrusted"
+    return text + (f" ({', '.join(others)})" if others else "")

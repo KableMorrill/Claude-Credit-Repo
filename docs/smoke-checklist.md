@@ -108,7 +108,7 @@ Settings ▸ Dockers ▸ Provenance Log turns the docker on; Krita keeps it on a
 | # | In Krita | Expected |
 | --- | --- | --- |
 | 33 | With a document open, Settings ▸ Dockers ▸ Provenance Log | The docker shows what Log Status shows, but with every event, oldest first, and ends "Generation capture: observing Krita AI Diffusion 1.53.0." |
-| 34 | Open a second document, switch between the two, then close both | The docker follows the active document; with none open it reads "No document is open." |
+| 34 | Open a second document and switch between the two | The docker follows the active document. With no document open, Krita shows its welcome page and hides the dockers |
 | 35 | New document, generate and apply a result | Within a second, without reopening anything, the docker lists the generation_applied line |
 | 36 | Export it with Provenance: Export Signed Image… | The docker adds "exported png, signed" and, under "Last export in this session:", the "Saved and signed" and "Read back" lines from the result dialog (this is also row 23's Log Status check) |
 | 37 | Open the .kra from row 30 | The docker lists "parentOf: ….kra", logged when it was reopened (row 30's Log Status check) |
@@ -121,6 +121,12 @@ Settings ▸ Dockers ▸ Provenance Log turns the docker on; Krita keeps it on a
 | 39 | Check Environment, then Set Up Signing | "krita-provenance 0.1.0.dev0" with no Problems section. Set Up Signing downloads nothing ("Already installed; nothing was downloaded.") and shows row 13's fingerprint: installing left the data folder alone |
 | 40 | Back to the checkout: quit Krita, delete `krita_provenance` and `krita_provenance.desktop` from `%APPDATA%\krita\pykrita`, run `uv run python scripts/dev_install.py`, start Krita | Check Environment works as before |
 
+### Read-back kept in the log (decision of 18 Oct 2026)
+
+| # | In Krita | Expected |
+| --- | --- | --- |
+| 41 | Export a document with Provenance: Export Signed Image…, save it as .kra, close it, reopen it | Log Status and the docker list "exported png, signed, read back Valid, signer untrusted": the read-back stays in the log. Exports logged before this change keep the shorter line |
+
 ## Results
 
 | Date | Setup | Rows | Result |
@@ -132,3 +138,4 @@ Settings ▸ Dockers ▸ Provenance Log turns the docker on; Krita keeps it on a
 | 16 Oct 2026 | Same | 17–22, on 17e5039 | 17 passes. 18 and 19 recorded every apply with its workflow and seed, row 18's result re-applied as an event of its own, but each read "layer not identified": the snapshot came from a timer, which Krita's busy-wait lets fire in mid-apply. Fixed in the next commit; rerun 18 and 19. 20 passes: the three events survived save and reopen. 21: no event, as expected, but the live result looked unchanged, so it's unclear a live result was applied. 22: both applies were ordinary ones (the region was dropped), and their layers were named after the prompt |
 | 16 Oct 2026 | Same | 18–19 rerun, on 2f4c0f7 | Pass: every event names the layer it landed on, including an apply made twice by mistake (two events, two layers) and row 18's result re-applied. **S3 passes.** A layer deleted afterwards keeps its event, by design: at export the manifest says that layer no longer exists and the region may still hold AI content |
 | 16 Oct 2026 | Same, signing set up | 23–32, on 86ff031 | Pass. 23 and 25: the PNG and the JPEG were saved and signed, read back Valid with the signer untrusted, with "1 AI generation observed by this plugin since 16 October 2026 (UTC)." 24: Verify shows created with krita-provenance, Krita AI Diffusion as the AI model and edited with AI. 26: Krita asked to save after the export. 27: a document opened from an image, saved and reopened as .kra, signed, so the kept copy served as its parent. 28: the save-first dialog appeared. 29: "(started_with_content)"; the export said why it couldn't sign and offered an unsigned copy. 30: signed after saving and reopening, with "The document was created with content already in it; how that content was made is not recorded." 31: "(new_document)". 32: a 4000×4000 export took about a second from choosing the file to the result dialog, under M1's 3 seconds. Not reported: row 23's Log Status line and row 30's (rows 36 and 37 cover them), row 27's Verify view of the parent, and what row 28's two export buttons did |
+| 18 Oct 2026 | Same | 27–28 completed; 33–40, on 582109f | Pass. 27: Verify offers "Show sources (1)", which shows the parent image. 28: both export buttons did what the row says. 33: the docker showed old-test.kra's log with every event, the unsigned export's reason under "Last export in this session:", and the capture status. 34: it follows the active document; with no document open Krita hides its dockers behind the welcome page, so "No document is open." never shows. 35: the generation appeared as soon as it was applied. 36: "exported png, signed" and the read-back lines. 37: "parentOf: S30_test.kra", logged at this reopening; row 30's export isn't in the log, as when the document isn't saved after an export. 38 to 40: the zip imported, Check Environment read 0.1.0.dev0, Set Up Signing found the install ("Already installed; nothing was downloaded.") and the 14 Oct certificate, and the dev link went back in. **V1 and I1 pass** |

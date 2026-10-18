@@ -21,6 +21,7 @@ from krita_provenance.log import (
     Model,
     Prompt,
     ProvenanceLog,
+    ReadBack,
     Source,
     UnknownEvent,
 )
@@ -66,7 +67,8 @@ def full_log() -> ProvenanceLog:
         )
     )
     entry.append(CaptureGap(minutes(36), minutes(48), log.ADAPTER_ERROR))
-    entry.append(Exported(minutes(56), "png", "standard", "urn:c2pa:0f6e1d2c"))
+    read_back = ReadBack("Valid", ("signingCredential.untrusted",))
+    entry.append(Exported(minutes(56), "png", "standard", "urn:c2pa:0f6e1d2c", read_back))
     entry.append(Exported(minutes(57), "jpeg", "standard", None))
     return entry
 
@@ -106,6 +108,18 @@ def test_json_is_the_spec_format():
         "to": "2026-11-02T18:52:11Z",
         "reason": "adapter_error",
     }
+    signed, unsigned = data["events"][4:]
+    assert signed["read_back"] == {"state": "Valid", "failures": ["signingCredential.untrusted"]}
+    assert "read_back" not in unsigned
+
+
+def test_an_export_logged_before_read_back_existed_writes_back_as_it_was():
+    data = json.loads((GOLDENS / "spec_example" / "log.json").read_text(encoding="utf-8"))
+    exported = data["events"][-1]
+    assert exported["type"] == "exported" and "read_back" not in exported
+    restored = ProvenanceLog.from_json(json.dumps(data))
+    assert isinstance(restored.events[-1], Exported) and restored.events[-1].read_back is None
+    assert json.loads(restored.to_json())["events"][-1] == exported
 
 
 def test_reads_the_spec_example():
@@ -185,6 +199,9 @@ def test_unknown_layer_is_kept_as_none():
         (lambda d: d["events"][0]["job"].update(seed="1234"), "integer"),
         (lambda d: d["events"][0].pop("at"), "malformed"),
         (lambda d: d["events"].append("exported"), "JSON object"),
+        (lambda d: d["events"][4].update(read_back="Valid"), "must be an object"),
+        (lambda d: d["events"][4]["read_back"].update(failures="none"), "must be a list"),
+        (lambda d: d["events"][4]["read_back"].update(state=1), "string"),
     ],
 )
 def test_rejects_logs_it_cannot_read(change, message):

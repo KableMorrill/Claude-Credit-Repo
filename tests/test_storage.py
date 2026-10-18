@@ -124,6 +124,20 @@ def test_summary_lists_the_latest_events_one_per_line():
     assert many[5] == "Latest events:" and len(many) == 8
 
 
+def test_an_export_line_says_what_its_read_back_reported():
+    untrusted = log.ReadBack("Valid", ("signingCredential.untrusted",))
+    signed = log.Exported(T0, "png", "standard", "urn:c2pa:1", untrusted)
+    assert storage.event_line(signed) == (
+        "2026-11-02T18:04:11Z  exported png, signed, read back Valid, signer untrusted"
+    )
+    odd = dataclasses.replace(signed, read_back=log.ReadBack("Valid", ("a.b", "c.d")))
+    assert storage.event_line(odd).endswith("read back Valid (a.b, c.d)")
+    older = dataclasses.replace(signed, read_back=None)  # logged before 18 Oct 2026
+    assert storage.event_line(older) == "2026-11-02T18:04:11Z  exported png, signed"
+    unsigned = log.Exported(T0, "jpeg", "standard", None)
+    assert storage.event_line(unsigned) == "2026-11-02T18:04:11Z  exported jpeg, unsigned"
+
+
 def test_summary_lists_every_event_for_the_docker():
     entry = storage.start(None, T0)
     gaps = [CaptureGap(T0, T0, log.ADAPTER_ERROR) for _ in range(storage.SUMMARY_EVENTS + 2)]
