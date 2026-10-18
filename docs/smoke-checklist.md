@@ -127,6 +127,12 @@ Settings ▸ Dockers ▸ Provenance Log turns the docker on; Krita keeps it on a
 | --- | --- | --- |
 | 41 | Export a document with Provenance: Export Signed Image…, save it as .kra, close it, reopen it | Log Status and the docker list "exported png, signed, read back Valid, signer untrusted": the read-back stays in the log. Exports logged before this change keep the shorter line |
 
+### Review fixes (step 7, piece 6)
+
+| # | In Krita | Expected |
+| --- | --- | --- |
+| 42 | Optional: Tools ▸ Scripts ▸ Scripter, run `d = Krita.instance().createDocument(512, 512, "scripted", "RGBA", "U8", "", 72.0)` and then `Krita.instance().activeWindow().addView(d)`. Without running Log Status first, generate and apply a result in the new view, then run Log Status | "(started_with_content)" and "Events: 1 generation_applied". Krita announces a script-made document before it has an image, so the plugin first meets it at the apply and doesn't claim it began as a blank canvas |
+
 ## Results
 
 | Date | Setup | Rows | Result |

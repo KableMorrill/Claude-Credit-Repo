@@ -201,7 +201,13 @@ def sign_file(
     except Exception as error:  # the SDK's errors, I/O errors: nothing may be left behind (E6)
         _remove(temporary)
         raise SigningError(f"Signing failed: {error}") from error
-    os.replace(temporary, destination)
+    try:
+        os.replace(temporary, destination)
+    except OSError as error:  # such as a destination another program holds open on Windows
+        _remove(temporary)
+        raise SigningError(
+            f"The signed file couldn't be saved as {destination.name}: {error}"
+        ) from error
     return result
 
 

@@ -110,6 +110,10 @@ GAP_REASONS = {
     log.PLUGIN_OFF: "the plugin was off",
     log.ADAPTER_ERROR: "the Krita AI Diffusion adapter failed",
     log.AI_DIFFUSION_MISSING: "Krita AI Diffusion was not found",
+    log.AI_DIFFUSION_UNATTRIBUTED: (
+        "a Krita AI Diffusion result went into an open document this plugin couldn't identify,"
+        " possibly this one"
+    ),
 }
 
 _INSTANCE_NAMESPACE = uuid.UUID("5a3c0b8e-6b7f-4b1a-9d2e-7c4f1e8a9b10")  # for ingredient ids

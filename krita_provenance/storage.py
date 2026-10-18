@@ -147,12 +147,14 @@ def parent(entry: ProvenanceLog) -> IngredientAdded | None:
 def append(annotation: bytes | None, file_name_: str | None, event: Event) -> bytes:
     """The annotation's new bytes, with ``event`` at the end of its log; write them back at once.
 
-    A document without a log gets one first, started now from its file name (``start``). An
+    A document without a log gets one first, started now from its file name (``start``). The
+    plugin didn't see such a document created, so an untitled one starts as
+    ``started_with_content``, never as a blank canvas (decision 2 of 16 Oct 2026). An
     unreadable log raises StorageError and is never replaced (``read``).
     """
     entry = read(annotation)
     if entry is None:
-        entry = start(file_name_)
+        entry = start(file_name_, blank=False)
     entry.append(event)
     return serialize(entry)
 

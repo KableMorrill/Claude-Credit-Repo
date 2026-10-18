@@ -141,6 +141,24 @@ def test_a_failed_signature_leaves_nothing_behind(tmp_path: Path):
     assert not destination.exists()
 
 
+def test_a_signed_file_that_cannot_be_moved_into_place_leaves_nothing_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """E6: on Windows another program can hold the destination open. Without this, the signed
+    temporary file stayed beside it and no unsigned copy was saved (review, 18 Oct 2026)."""
+    manifest, format_ = golden("nothing_observed")
+    source = source_for(format_, tmp_path)
+    destination = tmp_path / "out" / "signed.png"
+
+    def locked(source: object, target: object) -> None:
+        raise PermissionError(13, "The process cannot access the file", str(target))
+
+    monkeypatch.setattr(sdk.os, "replace", locked)
+    with pytest.raises(SigningError, match=r"couldn't be saved as signed\.png"):
+        sdk.sign_file(source, destination, manifest, SIGNER)
+    assert list(destination.parent.iterdir()) == []
+
+
 def test_a_failed_signature_keeps_the_previous_file(tmp_path: Path):
     manifest, format_ = golden("nothing_observed")
     destination = tmp_path / "signed.png"

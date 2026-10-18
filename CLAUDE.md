@@ -69,6 +69,8 @@ Then the rest of step 7, in this order, each piece committed with the four check
 6. One review at the end, limited to E6 labelling, key creation and storage, the installer
    hash check, and the log never losing events. Budget note: the three adversarial review
    workflows this session cost more than all the implementation; do not run more than that one.
+   **Done 18 Oct 2026**, inline and in those four areas only: three fixes and a docstring
+   ("Where things stand", piece 6). Step 7 is complete.
 
 Lessons that cost time this session: libkis wrappers die after the call that received them
 (rule below); ruff's preview formatter rewraps lines, so edit files with exact anchors read
@@ -234,7 +236,32 @@ test modules.
   untrusted"; the docker's "Last export in this session" still adds the path and, for an
   unsigned export, the reason, which the log doesn't keep. (2) Piece 5 was pushed (`582109f`);
   ask again before pushing later work.
-- **Not done:** the review (handover item 6); smoke row 41 checks decision 1 in Krita.
+- **Step 7, piece 6 (18 Oct 2026): the review**, done once, inline, in its four areas.
+  - E6 labelling, fixed: when the signed file couldn't be moved into place (a destination
+    another program holds open on Windows), `sdk.sign_file` left its signed `.part` file beside
+    it and the export failed with no unsigned copy. Now the temporary file is removed and the
+    export saves `-unsigned` with the reason. Otherwise sound: signing goes to a temporary
+    file that moves into place only after the read-back validates; every failure removes it;
+    the fallback name never takes or overwrites the chosen one.
+  - Key creation and storage: no change. The root key is never written. The signer key is
+    created exclusively (owner-only on POSIX, the profile folder on Windows). Existing keys are
+    never replaced, a partial set stops with "move them aside", and no user or machine name is
+    in the certificates.
+  - Installer hash check: no defect. Size and SHA-256 must match the pin before anything is
+    unpacked, and unpacking refuses unsafe paths. The docstring now states the boundary:
+    what's unpacked isn't hashed again, since anyone who can write to the data folder can
+    change `site-packages` anyway.
+  - The log never losing events, fixed twice. (1) When a Krita AI Diffusion result's document
+    couldn't be identified (possible if an untested version changes its internals), nothing
+    was logged, though the capture status promises a gap for any failure. Now every open
+    document's log gets `capture_gap` `ai_diffusion_unattributed`, disclosed as possibly this
+    document. (2) A document the plugin first meets in `storage.append` (one made by a script,
+    which has no image when Krita announces it) started as `new_document`, a blank-canvas
+    claim for a canvas the plugin never saw; it now starts as `started_with_content`. Checked
+    and kept: observation events at open are saved with the next change and re-added at each
+    open until then, and a declined save prompt discards new events with everything else
+    (smoke row 37).
+- **Not done:** smoke rows 41 (decision 1) and 42 (the append fix) in Krita.
   **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
   inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
   S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
@@ -257,7 +284,10 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** the one review (handover item 6), then smoke row 41.
+- **Next:** smoke rows 41 and 42. Then M1's other items: c2patool on a real export (G3's
+  second reader; Verify has read one), S5 (needs the user's Firefly and Photoshop files),
+  macOS and Linux checks, the go/no-go note (25 Oct 2026), and the Krita AI Diffusion issue
+  with a demo (the user's).
 
 ## Layout
 

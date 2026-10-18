@@ -430,6 +430,17 @@ def test_uses_the_machine_identity_by_default(monkeypatch: pytest.MonkeyPatch):
     assert "[user]" in text
 
 
+def test_an_unattributed_result_is_disclosed_as_possibly_this_document():
+    """Logged in every open document when the receiving one can't be identified (honesty rule 3:
+    say it may be AI, and why)."""
+    statement = mapping.gap_statement(CaptureGap(T0, T0, log.AI_DIFFUSION_UNATTRIBUTED))
+    assert statement == (
+        f"Capture gap from {log.format_time(T0)} to {log.format_time(T0)} (a Krita AI Diffusion"
+        " result went into an open document this plugin couldn't identify, possibly this one):"
+        " AI generations in this period were not observed by this plugin."
+    )
+
+
 def test_gap_statement_keeps_unknown_reasons_verbatim():
     gap = CaptureGap(T0, T1, "signal_disconnected")
     assert "(signal_disconnected)" in mapping.gap_statement(gap)

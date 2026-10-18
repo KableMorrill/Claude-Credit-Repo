@@ -47,6 +47,9 @@ AI_DIFFUSION_MISSING = "ai_diffusion_missing"
 # begins observing a document in that Krita session, with "to" == "from": the gap lasted until
 # Krita closed, which nothing records.
 AI_DIFFUSION_UNOBSERVED = "ai_diffusion_unobserved"
+# A Krita AI Diffusion result was applied, but the document it went into couldn't be identified.
+# Logged in every open document, with "to" == "from": any of them may have received it.
+AI_DIFFUSION_UNATTRIBUTED = "ai_diffusion_unattributed"
 
 # source.tool
 AI_DIFFUSION = "krita-ai-diffusion"
@@ -146,7 +149,7 @@ class IngredientAdded:
 class CaptureGap:
     start: datetime  # JSON "from"
     end: datetime  # JSON "to"
-    reason: str  # PLUGIN_OFF, ADAPTER_ERROR, AI_DIFFUSION_MISSING or a free-form message
+    reason: str  # one of the reasons above, or a free-form message
 
 
 @dataclass(frozen=True)

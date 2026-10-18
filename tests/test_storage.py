@@ -167,6 +167,14 @@ def test_append_starts_a_log_from_the_file_name_when_there_is_none():
         assert after.events == [IngredientAdded(after.started.at, log.PARENT_OF, "old.kra"), gap]
 
 
+def test_append_never_claims_a_blank_canvas_it_did_not_see():
+    """A document first seen at an append (one made by a script, say) already had content: it
+    can't be described as created blank (review, 18 Oct 2026)."""
+    gap = CaptureGap(T0, T0, log.ADAPTER_ERROR)
+    after = storage.read(storage.append(None, None, gap))
+    assert after is not None and after.started.reason == log.STARTED_WITH_CONTENT
+
+
 def test_append_never_replaces_a_log_it_cannot_read():
     """Starting afresh would drop the history this version can't read (P3 migrates in v1.0)."""
     for unreadable in (b'{"schema": "krita-provenance/9", "events": []}', b"{not json"):

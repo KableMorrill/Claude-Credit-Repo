@@ -2,7 +2,9 @@
 
 Threat model, tampered dependency: every download is checked against the size and SHA-256 in
 ``wheel_pins.py`` before anything is unpacked. The pins come from PyPI's JSON API through
-``scripts/update_wheel_pins.py`` and are reviewed in the diff that changes them.
+``scripts/update_wheel_pins.py`` and are reviewed in the diff that changes them. What has been
+unpacked is trusted as it stands: ``activate`` and an adopted staging folder don't hash it
+again, since anyone who can write to the data folder can already change ``site-packages``.
 
 Under the data folder the Krita glue chooses:
 

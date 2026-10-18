@@ -29,6 +29,7 @@ Krita call that caused the change.
 
 import tempfile
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -268,7 +269,8 @@ def _record_generation(model: Any, job_id: str, index: int) -> None:
     else:
         problem = "the document wasn't found among Krita's open documents"
     if document is None:
-        _warn_capture(f"A Krita AI Diffusion result was applied but not recorded: {problem}.")
+        _record_unattributed(at, problem)
+        _take_snapshot()
         return
     try:
         root = document.rootNode()
@@ -286,6 +288,23 @@ def _record_generation(model: Any, job_id: str, index: int) -> None:
     except storage.StorageError as error:
         _warn_capture(f"{error}\n\nThe applied Krita AI Diffusion result is not recorded.")
     _take_snapshot()
+
+
+def _record_unattributed(at: datetime, problem: str) -> None:
+    """C3 when an applied result's document can't be identified: every open document's log
+    records a gap, since any of them may have received it (honesty rule 3)."""
+    gap = CaptureGap(at, at, log.AI_DIFFUSION_UNATTRIBUTED)
+    for document in Krita.instance().documents():
+        if document.rootNode() is None:
+            continue  # no image yet; setAnnotation needs one
+        try:
+            append_event(document, gap)
+        except storage.StorageError:
+            continue  # its unreadable log was reported when it opened, and blocks export
+    _warn_capture(
+        "A Krita AI Diffusion result was applied, but this plugin couldn't tell which document"
+        f" received it ({problem}). Every open document's log records a capture gap."
+    )
 
 
 _adapter = ai_diffusion.Adapter(_record_generation)
