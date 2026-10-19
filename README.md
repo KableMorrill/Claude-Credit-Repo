@@ -17,6 +17,12 @@ crowdfunding campaign, and it works alongside
 > can see. The Provenance Log docker (Settings ▸ Dockers) shows the active document's log as
 > it grows. The AI-use report is still to come.
 
+> **Platforms.** Tested inside Krita on Windows 11. On macOS and Linux the automated tests
+> pass, but the plugin hasn't yet been tried inside Krita there. If you try it, please report
+> what happens; rows 1–16 of [docs/smoke-checklist.md](docs/smoke-checklist.md) are a good
+> guide. On a Mac, use Krita from krita.org rather than the Mac App Store edition. Signing isn't
+> available on Intel Macs or Windows on ARM yet.
+
 `krita-provenance` is a working title.
 
 ## What a manifest will show, and what it won't

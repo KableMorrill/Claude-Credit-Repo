@@ -22,11 +22,15 @@ M0's exit gate: each spike passes or has a written workaround.
 ### Workarounds
 
 - **S1 on macOS and Linux.** The installer's pinned wheels cover macOS arm64 and Linux x86_64,
-  and the install has run outside Krita on Linux x86_64 with Python 3.10 and 3.13. Krita's own
-  Python on those systems is unchecked. Before v0.1 ships, run smoke rows 1 to 16 on a Mac and on
-  Linux; M3's test matrix covers them for v1.0. Intel Macs and Windows on ARM get no local
-  signing key, because no current `cryptography` wheel exists for them. That gap is accepted
-  (decision 4 of 13 Oct), and K2's bring-your-own certificate (M2) is the way to sign there.
+  and the install has run outside Krita on Linux x86_64 with Python 3.10 and 3.13. CI runs the
+  whole test suite on macOS and Linux at every push, real signing included. Krita's own Python
+  on those systems is unchecked. The owner decided on 19 Oct: Linux is tested inside Krita as
+  v1.0 approaches; macOS relies on users' reports, since no Mac is at hand, and the README says
+  so. krita.org's Mac build lets its Python load libraries signed by others (its entitlements
+  disable library validation), so the main Mac-specific obstacle shouldn't apply. Intel Macs
+  and Windows on ARM get no local signing key, because no current `cryptography` wheel exists
+  for them. That gap is accepted (decision 4 of 13 Oct), and K2's bring-your-own certificate
+  (M2) is the way to sign there.
 - **S5's Photoshop file.** Without a Photoshop subscription, Firefly's own Generative Fill
   stood in, and no public Photoshop sample turned up (the C2PA public test files hold Adobe's
   synthetic 2022 samples and camera images). If a Photoshop export ever records a fill
@@ -99,5 +103,4 @@ Q5 (keys in the data folder) and Q6 (GPL-3.0-or-later is compatible) are decided
 
 ## To finish M0
 
-1. S1 on macOS and Linux, or accept the workaround above for now.
-2. The go/no-go decision.
+1. The go/no-go decision. S1's workaround for macOS and Linux is accepted (above).

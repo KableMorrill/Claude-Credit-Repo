@@ -14,8 +14,8 @@ scope, the log format, the C2PA mapping, the threat model and the milestones. Re
 ## Handover (13 Oct 2026, from the Fable session, updated by the Opus session)
 
 Read this first, then "Where things stand". Branch `claude/eloquent-hypatia-vzwd8l`, pushed at
-the user's request on 14, 15, 16 and 18 Oct 2026 (CI green through `c31ab29`; check the run
-for later pushes). From `c86d349` on, work happens in the user's Windows 11 checkout (Python 3.12 venv,
+the user's request on 14, 15, 16, 18 and 19 Oct 2026 and merged into `main` on 19 Oct 2026 (CI
+green through `2b62535`; check the run for later pushes). From `c86d349` on, work happens in the user's Windows 11 checkout (Python 3.12 venv,
 no c2patool), where all four checks pass.
 
 Results in (13 Oct 2026, Opus session): smoke rows 1 to 8 pass on Windows 11 (S1's Python
@@ -302,7 +302,7 @@ test modules.
 - **Decisions of 18 Oct 2026, sixth set**, from the user: (1) docs/spec.md ticks Q1 (settled
   by S5) and the finished items under "This week" (all but S1, which macOS and Linux still
   lack); its snapshot header now names the edits made at the user's request. The live Claude
-  Doc it was exported from doesn't have them. (2) `2b62535` was pushed; ask again before
+  Doc it was exported from got the same edits on 19 Oct 2026 (revision 22). (2) `2b62535` was pushed; ask again before
   pushing later work. (3) Claude drafted the Krita AI Diffusion issue for the user to post
   (Phase B: one documented signal for applied results, carrying params, layer IDs and kind).
   The draft lives in the session's scratchpad, not the repo.
@@ -318,9 +318,19 @@ test modules.
   Krita's AppImage and the release zip. For a Mac: borrow one, or rent an Apple-silicon Mac by
   the hour (Scaleway; Apple's licence sets a 24-hour minimum). Possibly CI on GitHub's macOS and
   Linux runners, if Krita's downloads can run Python without the interface (unchecked).
+- **Decisions of 19 Oct 2026**, from the user: (1) the README's "Platforms" note says the plugin
+  is tested inside Krita on Windows 11 only, asks macOS and Linux users for reports (smoke rows
+  1–16), points Mac users to krita.org's build rather than the Mac App Store's, and says Intel
+  Macs and Windows on ARM can't sign yet. Mac testing isn't required by Krita AI Diffusion, only
+  by the spec's own S1 and v1.0 matrix, which the user hasn't asked to change. (2) Linux is
+  tested inside Krita as v1.0 approaches, not before. (3) `dc1e39b`, `9235678` and `b25c242`
+  were pushed with the README change, and this branch was merged into `main` (a fast-forward),
+  so `main` now holds the plugin. (4) The live Claude Doc got this week's spec edits on 19 Oct
+  2026 (revision 22): `read_back` in the log example and its bullet, Q1 settled and ticked, and
+  the finished "This week" items ticked.
 - **Go/no-go note:** drafted in [docs/go-no-go.md](docs/go-no-go.md) on 18 Oct 2026; final
   once S5 runs. Recommendation: go.
-- **Not done:** S1 on macOS and Linux (above).
+- **Not done:** S1 inside Krita on Linux (as v1.0 approaches) and macOS (by users' reports).
   **S1 passes on Windows** (15 Oct 2026): Python 3.13.5, and c2pa-python loads and signs
   inside Krita; macOS and Linux are unchecked. **S3 passes** (16 Oct 2026, smoke rows 18 to 20).
   S5 hasn't run. **S2 passes** (16 Oct 2026): Verify reads the polygon samples and shows
@@ -343,9 +353,8 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** the go/no-go call (25 Oct 2026); S1 on macOS and Linux (above); the user's
-  LinkedIn posts, demo first (Claude may draft them; never posts). All the plugin work is on
-  this branch, and `main` still holds the 12 Oct scaffold, so merge before linking the repo.
+- **Next:** the go/no-go call (25 Oct 2026); the user's LinkedIn posts, demo first (Claude may
+  draft them; never posts); then M2.
 
 ## Layout
 
