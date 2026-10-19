@@ -650,6 +650,11 @@ methods, so `.connect` on them needs a `pyright: ignore`.
   (files alone don't count). It asks before overwriting, `shutil.rmtree`s `pykrita/<name>`,
   copies the directory and the .desktop file, and ignores the rest. Then it asks "Enable
   plugins now? (Requires restart)" and writes the `enable_<name>` setting.
+- macOS (read 19 Oct 2026, `packaging/macos/entitlements.plist`): krita.org's signed build has
+  `com.apple.security.cs.disable-library-validation` (and `allow-jit`), so its Python may load
+  native libraries signed by others, such as the wheels I2 downloads. The Mac App Store build
+  (`macStore-entitlements.plist`) is sandboxed and doesn't disable library validation, so it
+  may refuse them. Neither has been tried.
 - libkis `DockWidget::canvas()` returns the docker's current `Canvas`; `unsetCanvas` calls
   `canvasChanged(None)` and only then deletes that Canvas, so `canvas()` still returns the
   dying one during the call. `Canvas.view()` and `View.document()` return None when there is
