@@ -306,6 +306,13 @@ test modules.
   pushing later work. (3) Claude drafted the Krita AI Diffusion issue for the user to post
   (Phase B: one documented signal for applied results, carrying params, layer IDs and kind).
   The draft lives in the session's scratchpad, not the repo.
+- **Decision of 18 Oct 2026, seventh set**, from the user: no contact with Krita AI Diffusion
+  until v1.0 (no issue, Phase B hook proposal or Discussions post); the user doesn't want a
+  first open-source contribution to reach a major project unfinished. Meanwhile the user posts
+  progress on LinkedIn, starting with the demo. This moves M1's "Krita AI Diffusion issue
+  opened with a demo" past v1.0, beside M4's upstream PRs and write-up. At v1.0, redraft the
+  issue against the Krita AI Diffusion of the day; the proposal's substance is in the sixth
+  set, above.
 - **S1 on macOS and Linux:** the user has neither, but may have a spare desktop for Linux.
   Options given: WSL on the Windows 11 machine, or the spare PC booted from a USB stick, with
   Krita's AppImage and the release zip. For a Mac: borrow one, or rent an Apple-silicon Mac by
@@ -336,9 +343,9 @@ test modules.
   regenerated, and all five samples read Valid in c2pa-rs 0.85.1 with every action. On 16 Oct
   the user uploaded them to Verify: no errors, and the actions show. The go/no-go note is due
   25 Oct 2026.
-- **Next:** the go/no-go call (25 Oct 2026); S1 on macOS and Linux (above); the Krita AI
-  Diffusion issue with a demo, which the user posts. All the plugin work is on this branch, and
-  `main` still holds the 12 Oct scaffold, so the issue links the branch until it is merged.
+- **Next:** the go/no-go call (25 Oct 2026); S1 on macOS and Linux (above); the user's
+  LinkedIn posts, demo first (Claude may draft them; never posts). All the plugin work is on
+  this branch, and `main` still holds the 12 Oct scaffold, so merge before linking the repo.
 
 ## Layout
 

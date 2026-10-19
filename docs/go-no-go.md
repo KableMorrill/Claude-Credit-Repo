@@ -4,8 +4,8 @@ Draft, 18 October 2026, due 25 October 2026. Final once the go/no-go call is mad
 
 **Recommendation: go.** All five spikes pass: S1 on Windows only, with a workaround for macOS
 and Linux, and S5 with Firefly standing in for Photoshop. M1's scope (v0.1) is already built and
-checked inside Krita on Windows. Of M1's exit gate, only the Krita AI Diffusion issue with a demo
-is left.
+checked inside Krita on Windows. M1's exit gate is met, except the Krita AI Diffusion issue,
+which the owner has moved to after v1.0.
 
 ## Spikes
 
@@ -51,7 +51,7 @@ M1's exit gate:
 | --- | --- |
 | Exports validate in c2pa-python and c2patool | **Met.** Every export is read back with c2pa-python (c2pa-rs 0.91.0). On 18 Oct, c2patool 0.27.22 read seven real exports: all Valid, with the untrusted local signer as the only failure code. An unsigned export carries no manifest |
 | Adobe's Verify shows the actions | **Met.** Created with krita-provenance, Krita AI Diffusion as the AI model and edited with AI. For a document opened from an image, "Show sources" shows the parent |
-| Krita AI Diffusion issue opened with a demo | **Not yet.** Due 22 Nov; the project owner opens it |
+| Krita AI Diffusion issue opened with a demo | **Moved past v1.0** (the owner's decision, 18 Oct): no first contact with an unfinished plugin. The demo and progress posts go on LinkedIn meanwhile |
 | Export overhead at 4K under 3 seconds | **Met.** A 4000×4000 export took about a second, from choosing the file to the result |
 
 ## What M0 changed
